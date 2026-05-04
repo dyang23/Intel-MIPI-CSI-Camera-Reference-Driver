@@ -543,7 +543,6 @@ static int isx031_identify_module(struct i2c_client *client)
 			ISX031_OTP_MODULE_ID_L, module_id);
 		return -ENODEV;
 	}
-
 	return 0;
 }
 
@@ -1019,21 +1018,50 @@ static int isx031_probe(struct i2c_client *client)
 	if (!isx031->platform_data)
 		dev_warn(&client->dev, "No platform data provided\n");
 
+	/*
+	 * FSIN is a serializer pin that is electrically shared between the
+	 * paired sensors behind the same MAX9295. Only one sensor instance can
+	 * actually claim the GPIO descriptor; the other(s) will get -EBUSY and
+	 * must continue probing without it (the owner drives the line for all).
+	 */
+	isx031->fsin_gpio = devm_gpiod_get_optional(&client->dev, "fsin",
+						    GPIOD_OUT_LOW);
+	if (IS_ERR(isx031->fsin_gpio)) {
+		ret = PTR_ERR(isx031->fsin_gpio);
+		if (ret == -EBUSY) {
+			dev_info(&client->dev,
+				 "Fsin gpio already owned by sibling sensor, sharing\n");
+			isx031->fsin_gpio = NULL;
+		} else if (ret == -EPROBE_DEFER) {
+			return -EPROBE_DEFER;
+		} else {
+			dev_warn(&client->dev,
+				 "Failed to get fsin gpio: %d, continuing\n", ret);
+			isx031->fsin_gpio = NULL;
+		}
+	}
+	if (isx031->fsin_gpio) {
+		/* Drive FSIN low so the serializer pin leaves Hi-Z and the
+		 * sensor's FSYNC input has a defined level before init. */
+		gpiod_direction_output(isx031->fsin_gpio, 0);
+		dev_info(&client->dev, "Fsin gpio found\n");
+	}
+
+	/* Request reset asserted so we can guarantee a clean low->high edge */
 	isx031->reset_gpio = devm_gpiod_get_optional(&client->dev, "reset",
-							 GPIOD_OUT_LOW);
+                         GPIOD_OUT_HIGH);
 	if (IS_ERR(isx031->reset_gpio))
 		return -EPROBE_DEFER;
 	if (isx031->reset_gpio)
 		dev_info(&client->dev, "Reset gpio found\n");
 	else
 		dev_warn(&client->dev, "Reset gpio not found\n");
-
-	isx031->fsin_gpio = devm_gpiod_get_optional(&client->dev, "fsin",
-						    GPIOD_OUT_LOW);
-	if (isx031->fsin_gpio)
-		dev_info(&client->dev, "Fsin gpio found\n");
-	else
-		dev_warn(&client->dev, "Fsin gpio not found\n");
+	if (isx031->reset_gpio) {
+		/* Hold reset asserted long enough for POR, then release. */
+		usleep_range(2000, 3000);
+		gpiod_set_value_cansleep(isx031->reset_gpio, 0);
+		msleep(ISX031_REG_SLEEP_20MS);
+	}
 
 	/* Initialize subdevice */
 	sd = &isx031->sd;

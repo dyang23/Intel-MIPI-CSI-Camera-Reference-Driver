@@ -140,8 +140,12 @@
 #define MAX96717_FRONTTOP_13_VS_IND_EN	BIT(7)
 
 #define MAX96717_FRONTTOP_20(p)			(0x31c + (p) * 0x1)
+#define MAX96717_FRONTTOP_20_SOFT_VC_EN		BIT(6)
 #define MAX96717_FRONTTOP_20_SOFT_BPP_EN	BIT(5)
 #define MAX96717_FRONTTOP_20_SOFT_BPP		GENMASK(4, 0)
+
+#define MAX96717_FRONTTOP_24		0x320
+#define MAX96717_FRONTTOP_24_SOFT_VC(x)		(GENMASK(1, 0) << ((x) * 2))
 
 #define MAX96717_MIPI_RX0			0x330
 #define MAX96717_MIPI_RX0_NONCONTCLK_EN		BIT(6)
@@ -245,6 +249,7 @@ struct max96717_chip_info {
 	unsigned int num_phys;
 	unsigned int phy_hw_ids[MAX96717_PHYS_NUM];
 	bool vs_independent;
+	bool has_preset_vc;
 };
 
 #define ser_to_priv(_ser) \
@@ -902,8 +907,31 @@ static int max96717_set_pipe_vcs(struct max_ser *ser,
 	if (ret)
 		return ret;
 
-	return regmap_write(priv->regmap, MAX96717_FRONTTOP_2(index),
+	ret = regmap_write(priv->regmap, MAX96717_FRONTTOP_2(index),
 			      (vcs >> 8) & 0xff);
+	if (ret)
+		return ret;
+
+	/*
+	 * FIXME: Hardcode soft VC remap to match with vc_remaps[] table
+	 */
+	if (priv->info->has_preset_vc &&
+	    pipe->index < ser->ops->num_vc_remaps) {
+		unsigned int mask = MAX96717_FRONTTOP_24_SOFT_VC(index);
+		unsigned int vc = ser->vc_remaps[pipe->index].dst;
+
+		ret = regmap_update_bits(priv->regmap, MAX96717_FRONTTOP_24,
+					 mask, field_prep(mask, vc));
+		if (ret)
+			return ret;
+
+		ret = regmap_assign_bits(priv->regmap, MAX96717_FRONTTOP_20(index),
+					 MAX96717_FRONTTOP_20_SOFT_VC_EN, true);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 static int max96717_log_status(struct max_ser *ser)
@@ -1144,11 +1172,16 @@ static int max96717_set_pipe_phy(struct max_ser *ser, struct max_ser_pipe *pipe,
 static int max96717_set_vs_independent(struct max_ser *ser)
 {
 	struct max96717_priv *priv = ser_to_priv(ser);
+	unsigned int i;
+	int ret;
+
 	if (!priv->info->vs_independent)
 		return 0;
 
 	return regmap_assign_bits(priv->regmap, MAX96717_FRONTTOP_13_VS_IND,
-				  MAX96717_FRONTTOP_13_VS_IND_EN, priv->info->vs_independent);
+							MAX96717_FRONTTOP_13_VS_IND_EN, priv->info->vs_independent);
+
+	return 0;
 }
 
 static int max96717_set_pipe_mode(struct max_ser *ser,
@@ -1434,6 +1467,7 @@ static const struct max_serdes_tpg_entry max96717_tpg_entries[] = {
 };
 
 static const struct max_ser_ops max9295d_ops = {
+	.num_vc_remaps = 2,
 	.phys_configs = {
 		.num_configs = ARRAY_SIZE(max9295d_phys_configs),
 		.configs = max9295d_phys_configs,
@@ -1723,8 +1757,9 @@ static int max96717_probe(struct i2c_client *client)
 	ops->num_pipes = priv->info->num_pipes;
 	ops->num_dts_per_pipe = priv->info->num_dts_per_pipe;
 	ops->num_phys = priv->info->num_phys;
-	ops->phys_configs = priv->info->ops->phys_configs;
 	ops->vs_independent = priv->info->vs_independent;
+	ops->phys_configs = priv->info->ops->phys_configs;
+	ops->num_vc_remaps = priv->info->ops->num_vc_remaps;
 	priv->ser.ops = ops;
 
 	ret = max96717_wait_for_device(priv);
@@ -1768,7 +1803,7 @@ static const struct max96717_chip_info max9295d_info = {
 	.pipe_hw_ids = { 0, 1, 2, 3 },
 	.num_phys = 2,
 	.phy_hw_ids = { 0, 1 },
-	.vs_independent = true,
+	.has_preset_vc = true,
 };
 
 static const struct max96717_chip_info max96717_info = {

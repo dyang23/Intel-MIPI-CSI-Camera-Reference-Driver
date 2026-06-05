@@ -733,6 +733,17 @@ static int max_ser_get_frame_desc_state(struct v4l2_subdev *sd,
 
 		hw.entry.stream = route->source_stream;
 
+		/*
+		 * FIXME: Soft VC remap keyed by pipe index. Sensors usually report
+		 * vc=0 on every stream, so rewrite only the downstream VC (fd->entry)
+		 * for the deserializer remap table, while hw.entry keeps the real VC
+		 * for the serializer pipe VC mask.
+		 * TBD: For generic remap, carry the remapped VC in the routing and let
+		 * the serializer remap before matching.
+		 */
+		if (hw.pipe && hw.pipe->index < ser->ops->num_vc_remaps)
+			hw.entry.bus.csi2.vc = ser->vc_remaps[hw.pipe->index].dst;
+
 		fd->entry[fd->num_entries++] = hw.entry;
 	}
 
@@ -1439,6 +1450,22 @@ static const struct media_entity_operations max_ser_media_ops = {
 	.link_validate = v4l2_subdev_link_validate,
 };
 
+static void max_ser_init_vc_remaps(struct max_ser_priv *priv)
+{
+	struct max_ser *ser = priv->ser;
+	unsigned int n = min_t(unsigned int, ser->ops->num_pipes,
+			       ser->ops->num_vc_remaps);
+	unsigned int i;
+
+	/* FIXME: Hardcode Pipe X->VC0, Pipe Y->VC1, Pipe Z->VC2, Pipe U->VC3. */
+	for (i = 0; i < n; i++) {
+		ser->vc_remaps[i].src = i;
+		ser->vc_remaps[i].dst = i;
+	}
+
+	ser->num_vc_remaps = n;
+}
+
 static int max_ser_init(struct max_ser_priv *priv)
 {
 	struct max_ser *ser = priv->ser;
@@ -1450,6 +1477,9 @@ static int max_ser_init(struct max_ser_priv *priv)
 		if (ret)
 			return ret;
 	}
+
+	if (ser->ops->num_vc_remaps)
+		max_ser_init_vc_remaps(priv);
 
 	if (ser->ops->set_tunnel_enable) {
 		ret = ser->ops->set_tunnel_enable(ser, false);

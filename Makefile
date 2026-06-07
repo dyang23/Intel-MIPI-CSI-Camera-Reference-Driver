@@ -45,6 +45,7 @@ export CONFIG_VIDEO_MAX96724=m
 export CONFIG_VIDEO_MAX9296A=m
 export CONFIG_MEDIA_CONTROLLER=m
 export CONFIG_VIDEO_D4XX=m
+export CONFIG_VIDEO_VB1940=m
 
 # Define config macros for conditional compilation in ipu-acpi.c
 # IS_ENABLED() checks for CONFIG_XXX or CONFIG_XXX_MODULE

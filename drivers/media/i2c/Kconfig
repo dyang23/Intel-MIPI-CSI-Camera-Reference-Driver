@@ -121,4 +121,14 @@ config VIDEO_D4XX
 		To compile this driver as a module, choose M here: the
 		module will be called d4xx
 
+config VIDEO_VB1940
+	tristate "ST VB1940 sensor support"
+	select V4L2_CCI_I2C
+	help
+	  This is a Video4Linux2 sensor driver for the ST VB1940
+	  camera sensor.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called vb1940.
+
 source "drivers/media/i2c/maxim-serdes/Kconfig"

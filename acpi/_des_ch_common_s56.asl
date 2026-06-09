@@ -52,12 +52,12 @@ Device (DESCH_CH)
             })
             Device (CAM0)
             {
-                #define SERCH_CAM_I2C 0x1a
+                #define SERCH_CAM_I2C 0x11
                 #define CAM_CSI_REMOTE_PORT 0
                 #define DESCH_SER_GPIORESETID 0
                 #define DESCH_SER_GPIOFSINID 2
                 #define DESCH_CAM_FSIN_GPIO 1
-                #include "_cam_common_s36.asl"
+                #include "_cam_common_s56.asl"
                 #undef DESCH_CAM_FSIN_GPIO
                 #undef DESCH_SER_GPIORESETID
                 #undef DESCH_SER_GPIOFSINID
@@ -79,10 +79,10 @@ Device (DESCH_CH)
             })
             Device (CAM1)
             {
-                #define SERCH_CAM_I2C 0x1b
+                #define SERCH_CAM_I2C 0x10
                 #define CAM_CSI_REMOTE_PORT 1
                 #define DESCH_SER_GPIORESETID 1
-                #include "_cam_common_s36.asl"
+                #include "_cam_common_s56.asl"
                 #undef DESCH_CAM_FSIN_GPIO
                 #undef DESCH_SER_GPIORESETID
                 #undef CAM_CSI_REMOTE_PORT

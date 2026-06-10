@@ -24,6 +24,7 @@
 # Known sensor / SerDes HIDs:
 #   INTC10CD = D4XX camera   (entity prefixes: "DS5 mux", "D4XX depth/rgb/ir/imu")
 #   INTC113C = ISX031 camera (entity prefix:   "isx031")
+#   INTC1940 = VB1940 camera (entity prefix:   "vb1940")
 #   INTC1138 = MAX9295A / MAX96717 serializer   (1 PHY,  entity prefix: "max96717")
 #   INTC1140 = MAX9295D serializer              (2 PHYs, entity prefix: "max96717")
 #   INTC1137 = MAX9296A deserializer            (entity prefix: "max9296a")
@@ -34,10 +35,12 @@
 declare -A SENSOR_MODEL=(
     [INTC10CD]=d4xx
     [INTC113C]=isx031
+    [INTC1940]=vb1940
 )
 declare -A SENSOR_PREFIX=(
     [INTC10CD]="DS5 mux"
     [INTC113C]="isx031"
+    [INTC1940]="vb1940"
 )
 
 # Serializer / deserializer HID -> v4l entity prefix
@@ -450,13 +453,19 @@ D4XX_IMU_SIZE=${D4XX_IMU_SIZE:-38x1}
 ISX031_FMT=${ISX031_FMT:-UYVY8_1X16}
 ISX031_SIZE=${ISX031_SIZE:-1920x1536}
 
-# Stream metadata.  d4xx: depth/rgb/ir/imu.  isx031: yuv (treated as row 0).
-declare -A STREAM_NODE=(   [depth]=0 [rgb]=1 [ir]=2 [imu]=3 [yuv]=0 )
+# ---- VB1940 (ST, RAW10 Bayer) ----------------------------------------------
+# Streams: raw
+VB1940_FMT=${VB1940_FMT:-SRGGB10_1X10}
+VB1940_SIZE=${VB1940_SIZE:-2560x1984}
+
+# Stream metadata.  d4xx: depth/rgb/ir/imu.  isx031: yuv.  vb1940: raw.
+declare -A STREAM_NODE=(   [depth]=0 [rgb]=1 [ir]=2 [imu]=3 [yuv]=0 [raw]=0 )
 declare -A STREAM_MUXPAD=( [depth]=1 [rgb]=2 [ir]=3 [imu]=4 )
 
 declare -A MODEL_DEFAULT_STREAMS=(
     [d4xx]="depth rgb"
     [isx031]="yuv"
+    [vb1940]="raw"
 )
 
 stream_fmt() {
@@ -466,6 +475,7 @@ stream_fmt() {
         ir)    echo "${D4XX_IR_FMT}"    ;;
         imu)   echo "${D4XX_IMU_FMT}"   ;;
         yuv)   echo "${ISX031_FMT}"     ;;
+        raw)   echo "${VB1940_FMT}"     ;;
     esac
 }
 stream_size() {
@@ -473,12 +483,14 @@ stream_size() {
         depth|rgb|ir) echo "${D4XX_WIDTH}x${D4XX_HEIGHT}" ;;
         imu)          echo "${D4XX_IMU_SIZE}"             ;;
         yuv)          echo "${ISX031_SIZE}"               ;;
+        raw)          echo "${VB1940_SIZE}"               ;;
     esac
 }
 stream_valid_for_model() {
     case "$2" in
         d4xx)   [[ $1 == depth || $1 == rgb || $1 == ir || $1 == imu ]] ;;
         isx031) [[ $1 == yuv ]] ;;
+        vb1940) [[ $1 == raw ]] ;;
         *)      return 1 ;;
     esac
 }
@@ -745,6 +757,9 @@ for k in "${!CFG_LINKS[@]}"; do
             isx031)
                 media-ctl -V "\"isx031 ${cam}\":0/${idx} [fmt:${fmt}/${size} field:none]"
                 ;;
+            vb1940)
+                media-ctl -V "\"vb1940 ${cam}\":0/${idx} [fmt:${fmt}/${size} field:none]"
+                ;;
         esac
         media-ctl -V "\"${ser_pfx} ${ser}\":${p}/${idx} [fmt:${fmt}/${size} field:none]"
         media-ctl -V "\"${ser_pfx} ${ser}\":${ser_src_pad}/${src_stream} [fmt:${fmt}/${size} field:none]"
@@ -763,6 +778,7 @@ mbus_to_pixfmt() {
         YUYV8_1X16) echo YUYV ;;
         VYUY8_1X16) echo "Y8I " ;;  # IR -> interleaved 8-bit greyscale
         Y8_1X8)     echo GREY ;;
+        SRGGB10_1X10) echo RG10 ;;
         *)          echo ""   ;;
     esac
 }

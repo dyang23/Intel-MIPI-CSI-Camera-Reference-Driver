@@ -856,9 +856,6 @@ static int max_ser_get_pipe_vcs_dts(struct max_ser_priv *priv,
 	*vcs = 0;
 	*num_dts = 0;
 
-	if (ser->mode != MAX_SERDES_GMSL_PIXEL_MODE)
-		return 0;
-
 	for_each_active_route(&state->routing, route) {
 		struct max_ser_route_hw hw;
 		unsigned int vc, dt;
@@ -874,12 +871,16 @@ static int max_ser_get_pipe_vcs_dts(struct max_ser_priv *priv,
 			continue;
 
 		vc = hw.entry.bus.csi2.vc;
-		dt = hw.entry.bus.csi2.dt;
 
 		if (vc >= MAX_SERDES_VC_ID_NUM)
 			return -E2BIG;
 
 		*vcs |= BIT(vc);
+
+		if (!dts || ser->mode != MAX_SERDES_GMSL_PIXEL_MODE)
+			continue;
+
+		dt = hw.entry.bus.csi2.dt;
 
 		/* Skip already added DT. */
 		for (i = 0; i < *num_dts; i++)
@@ -892,6 +893,9 @@ static int max_ser_get_pipe_vcs_dts(struct max_ser_priv *priv,
 		dts[*num_dts] = dt;
 		(*num_dts)++;
 	}
+
+	if (!dts || ser->mode != MAX_SERDES_GMSL_PIXEL_MODE)
+		return 0;
 
 	/*
 	 * Hardware cannot distinguish between different pairs of VC and DT,
@@ -1050,25 +1054,23 @@ static int max_ser_update_pipe(struct max_ser_priv *priv,
 {
 	struct max_ser *ser = priv->ser;
 	struct max_ser_pipe_mode mode = { 0 };
-	unsigned int num_dts;
-	unsigned int *dts;
+	unsigned int num_dts = 0;
+	unsigned int *dts = NULL;
 	unsigned int vcs;
 	int ret;
 
-	if (!ser->ops->num_dts_per_pipe)
+	if (!ser->ops->num_dts_per_pipe && !ser->ops->set_pipe_vcs)
 		return 0;
 
-	dts = devm_kcalloc(priv->dev, ser->ops->num_dts_per_pipe, sizeof(*dts),
-			   GFP_KERNEL);
-	if (!dts)
-		return -ENOMEM;
+	if (ser->ops->num_dts_per_pipe) {
+		dts = devm_kcalloc(priv->dev, ser->ops->num_dts_per_pipe, sizeof(*dts),
+				   GFP_KERNEL);
+		if (!dts)
+			return -ENOMEM;
+	}
 
 	ret = max_ser_get_pipe_vcs_dts(priv, state, pipe, &vcs, dts, &num_dts,
 				       streams_masks);
-	if (ret)
-		goto err_free_dts;
-
-	ret = max_ser_get_pipe_mode(priv, state, pipe, &mode);
 	if (ret)
 		goto err_free_dts;
 
@@ -1077,6 +1079,15 @@ static int max_ser_update_pipe(struct max_ser_priv *priv,
 		if (ret)
 			goto err_free_dts;
 	}
+
+	if (!ser->ops->num_dts_per_pipe) {
+		pipe->vcs = vcs;
+		return 0;
+	}
+
+	ret = max_ser_get_pipe_mode(priv, state, pipe, &mode);
+	if (ret)
+		goto err_revert_vcs;
 
 	ret = max_ser_set_pipe_mode(priv, pipe, &mode);
 	if (ret)
@@ -1946,7 +1957,6 @@ static int max_ser_parse_sink_dt_endpoint(struct max_ser_priv *priv,
 
 	return 0;
 }
-
 static int max_ser_find_phys_config(struct max_ser_priv *priv)
 {
 	struct max_ser *ser = priv->ser;

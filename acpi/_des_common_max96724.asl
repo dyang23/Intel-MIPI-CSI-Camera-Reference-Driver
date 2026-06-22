@@ -91,7 +91,8 @@ Name (_DSD, Package ()          // _DSD: Device-Specific Data
         Package () { "mipi-img-port-1", "PRT1" }, // Connected to Link 1 of DESx (used by SERx CSI2Bus ResourceSourceIndex)
         Package () { "mipi-img-port-2", "PRT2" }, // Connected to Link 2 of DESx (used by SERx CSI2Bus ResourceSourceIndex)
         Package () { "mipi-img-port-3", "PRT3" }, // Connected to Link 3 of DESx (used by SERx CSI2Bus ResourceSourceIndex)
-        Package () { "mipi-img-port-6", "PRT6" }, // Connected to IPU0 PRTx (used by DESx CSI2Bus LocalPort)
+        Package () { "mipi-img-port-4", "PRT4" }, // DES internal PHY0 -> IPU MIPI port (used by DESx CSI2Bus LocalPort = 4)
+        Package () { "mipi-img-port-6", "PRT6" }, // DES internal PHY2 -> IPU MIPI port (used by DESx CSI2Bus LocalPort = 6)
     }
 })
 Name (PRT0, Package()
@@ -135,6 +136,17 @@ Name (PRT3, Package()
     },
 
 })
+Name (PRT4, Package()
+{
+    ToUUID("daffd814-6eba-4d8c-8a91-bc9bbf4aa301"), // Device Properties
+    Package ()
+    {
+        Package () { "mipi-img-clock-lanes", 0 },
+        Package () { "mipi-img-data-lanes", Package() { 1, 2 } },             // 2 lanes for CPHY on Intel MIPI CRD
+        Package () { "mipi-img-link-frequencies", Package() { 1000000000 } }, // 1 GHz to be used by Intel IPU driver as link frequency
+    },
+})
+
 Name (PRT6, Package()
 {
     ToUUID("daffd814-6eba-4d8c-8a91-bc9bbf4aa301"), // Device Properties

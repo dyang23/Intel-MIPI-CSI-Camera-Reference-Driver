@@ -58,7 +58,7 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
             // ---- DES-level configuration (NODKA unitree board) ----
             #define DES_PHY_TYPE          0           /* CSI2_PHY_TYPE_CPHY */
             #define DES_I2C_ADDR          0x0027      /* MAX96724 @ 0x27 */
-            #define DES_INTERNAL_PHY      4           /* MAX96724_TX_PHY0 ("cphy A") */
+            #define DES_INTERNAL_PHY      4           /* MAX96724_TX_PHY0 ("cphy A") - VERIFIED WORKING (PHY sweep D->C->B->A) */
             #define DES_TO_MIPI_PORT      0           /* IPU_MIPI_PORT_0 (mipi0) */
             #define DES_I2C_BUS           "\\_SB.PC00.I2C0"   /* I2C bus 0 */
             #define DES_PATH              "\\_SB.PC00.DES0"

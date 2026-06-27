@@ -109,5 +109,6 @@ Name (PRT0, Package()
         #else
         Package () { "mipi-img-data-lanes", Package() { 1, 2, 3, 4 } },
         #endif
+        Package () { "mipi-img-link-frequencies", Package() { 600000000 } }, // 600 MHz DPHY, matches _cam_common_s36.asl
     },
 })

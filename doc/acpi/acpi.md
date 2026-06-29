@@ -8,7 +8,7 @@ Create ASL source file based on current hardware setup using reference ASL sourc
 
 | Use case | Reference ASL source file |
 | --- | --- |
-| 1x 2D sensor | max96724_li_isx031.asl, max96724_sensing_isx031.asl, max96724_sensing_s36.asl |
+| 1x 2D sensor | max96724_li_isx031.asl, max96724_sensing_isx031.asl, max96724_sensing_s36.asl, max96724_sensing_s56.asl |
 | 1x 3D sensor | max96724_rs_d457.asl |
 | 2x 2D sensor | max9296_d3_isx031.asl |
 | 4x 2D sensor on single DES | max96724_d3_isx031.asl |

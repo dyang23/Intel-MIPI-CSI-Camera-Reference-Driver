@@ -5,6 +5,17 @@ shopt -s nullglob
 DIR="kernel/firmware/acpi"
 BUILD_DIR="acpi/build"
 
+# Use the iasl shipped on the U-disk rather than whatever is in $PATH, so the
+# ACPICA version stays pinned regardless of the host system. The path is
+# relative to this script's location: script/../../tools/acpica-.../iasl
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IASL="${SCRIPT_DIR}/../../../tools/acpica-unix-20260408/generate/unix/bin/iasl"
+
+if [ ! -x "$IASL" ]; then
+    echo "ERROR: iasl not found or not executable at $IASL" >&2
+    exit 1
+fi
+
 if [ -z "$1" ]; then
     echo "Usage: $0 <asl file>"
     exit 1
@@ -22,7 +33,7 @@ PREPROCESSED="${1%.asl}.i"
 # cannot leave the old AML in place to be packaged below.
 rm -f "$AML" "$PREPROCESSED" ./img_ssdt.img
 
-iasl -li "$1"
+"$IASL" -I acpi -li "$1"
 
 # iasl can return 0 with warnings but skip writing the AML on errors;
 # guard against that as well.

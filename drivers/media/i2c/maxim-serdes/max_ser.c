@@ -118,6 +118,30 @@ max_ser_find_phy_pipe(struct max_ser *ser, struct max_ser_phy *phy)
 	return NULL;
 }
 
+/*
+ * Select the pipe that carries a given sink stream of a PHY.
+ *
+ * A single sensor can multiplex several streams onto one CSI input PHY, each
+ * on its own virtual channel (e.g. a D457 emitting depth/rgb/ir/imu). The
+ * deserializer allocates one pipe per stream and expects the serializer pipe
+ * index to equal that stream index (see max_des_set_pipes_stream_id()), so map
+ * sink_stream N to pipe N when that pipe belongs to this PHY. Fall back to the
+ * first pipe of the PHY for single-stream sensors, preserving legacy behaviour.
+ */
+static struct max_ser_pipe *
+max_ser_find_stream_pipe(struct max_ser *ser, struct max_ser_phy *phy,
+			 u32 sink_stream)
+{
+	if (sink_stream < ser->ops->num_pipes) {
+		struct max_ser_pipe *pipe = &ser->pipes[sink_stream];
+
+		if (pipe->phy_id == phy->index)
+			return pipe;
+	}
+
+	return max_ser_find_phy_pipe(ser, phy);
+}
+
 static struct max_serdes_source *
 max_ser_get_phy_source(struct max_ser_priv *priv, struct max_ser_phy *phy)
 {
@@ -229,7 +253,7 @@ static int max_ser_route_to_hw(struct max_ser_priv *priv,
 	if (!phy)
 		return -ENOENT;
 
-	hw->pipe = max_ser_find_phy_pipe(ser, phy);
+	hw->pipe = max_ser_find_stream_pipe(ser, phy, route->sink_stream);
 	if (!hw->pipe)
 		return -ENOENT;
 
@@ -1135,12 +1159,8 @@ static int max_ser_update_phy(struct max_ser_priv *priv,
 	u32 pad = max_ser_phy_to_pad(ser, phy);
 	bool enable_changed = !streams_masks[pad] != !priv->streams_masks[pad];
 	bool enable = !!streams_masks[pad];
-	struct max_ser_pipe *pipe;
+	unsigned int i, done = 0;
 	int ret;
-
-	pipe = max_ser_find_phy_pipe(ser, phy);
-	if (!pipe)
-		return -ENOENT;
 
 	if (!enable && enable_changed) {
 		ret = max_ser_phy_set_active(ser, phy, enable);
@@ -1148,29 +1168,48 @@ static int max_ser_update_phy(struct max_ser_priv *priv,
 			return ret;
 	}
 
-	ret = max_ser_update_pipe(priv, pipe, state, streams_masks);
-	if (ret)
-		goto err_revert_phy_disable;
+	/*
+	 * A single sensor can feed several pipes on this PHY, one per stream
+	 * (e.g. a D457 with depth/rgb/ir/imu on VC0-3). Configure and
+	 * (dis)enable every pipe bound to this PHY, not just the first one -
+	 * otherwise only the first stream ever reaches the deserializer.
+	 */
+	for (i = 0; i < ser->ops->num_pipes; i++) {
+		struct max_ser_pipe *pipe = &ser->pipes[i];
 
-	ret = max_ser_update_pipe_enable(priv, pipe, state, streams_masks);
-	if (ret)
-		goto err_revert_pipe_update;
+		if (pipe->phy_id != phy->index)
+			continue;
+
+		ret = max_ser_update_pipe(priv, pipe, state, streams_masks);
+		if (ret)
+			goto err_revert;
+
+		done = i + 1;
+
+		ret = max_ser_update_pipe_enable(priv, pipe, state, streams_masks);
+		if (ret)
+			goto err_revert;
+	}
 
 	if (enable && enable_changed) {
 		ret = max_ser_phy_set_active(ser, phy, enable);
 		if (ret)
-			goto err_revert_update_pipe_enable;
+			goto err_revert;
 	}
 
 	return 0;
 
-err_revert_update_pipe_enable:
-	max_ser_update_pipe_enable(priv, pipe, state, priv->streams_masks);
+err_revert:
+	for (i = 0; i < done; i++) {
+		struct max_ser_pipe *pipe = &ser->pipes[i];
 
-err_revert_pipe_update:
-	max_ser_update_pipe(priv, pipe, state, priv->streams_masks);
+		if (pipe->phy_id != phy->index)
+			continue;
 
-err_revert_phy_disable:
+		max_ser_update_pipe_enable(priv, pipe, state, priv->streams_masks);
+		max_ser_update_pipe(priv, pipe, state, priv->streams_masks);
+	}
+
 	if (!enable && enable_changed)
 		max_ser_phy_set_active(ser, phy, !enable);
 

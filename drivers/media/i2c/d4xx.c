@@ -3219,7 +3219,7 @@ static int ds5_get_hwmc_status(struct ds5 *state)
 		ret = ds5_read(state, DS5_HWMC_STATUS, &status);
 	} while (!ret && retries-- && status == DS5_HWMC_STATUS_WIP);
 
-	dev_info(&state->client->dev, "%s(): ret: 0x%x, status: 0x%x\n", __func__, ret, status);
+	dev_dbg(&state->client->dev, "%s(): ret: 0x%x, status: 0x%x\n", __func__, ret, status);
 
 	if (ret || status != DS5_HWMC_STATUS_OK) {
 		if (status == DS5_HWMC_STATUS_ERR) {
@@ -3238,7 +3238,7 @@ static int ds5_get_hwmc_status(struct ds5 *state)
 				break;
 			}
 
-			dev_err(&state->client->dev,
+			dev_dbg(&state->client->dev,
 				"%s: HWMC failed, ret: %d, status: %x, error code: %d\n",
 				__func__, ret, status, errorCode);
 		}

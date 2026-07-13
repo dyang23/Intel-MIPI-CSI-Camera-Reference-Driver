@@ -1169,6 +1169,18 @@ static void max96724_remove(struct i2c_client *client)
 	gpiod_set_value_cansleep(priv->gpiod_enable, 0);
 }
 
+static void max96724_shutdown(struct i2c_client *client)
+{
+	struct max96724_priv *priv = i2c_get_clientdata(client);
+
+	/*
+	 * Reset the remote serializers while the GMSL link is still up so a
+	 * warm reboot leaves them in a clean power-up state (see
+	 * max_des_shutdown). Without this the next probe fails with -121.
+	 */
+	max_des_shutdown(&priv->des);
+}
+
 static const struct acpi_device_id max96724_acpi_ids[] = {
 	{ "INTC1139", (kernel_ulong_t) &max96724_info },
 	{}
@@ -1192,6 +1204,7 @@ static struct i2c_driver max96724_i2c_driver = {
 	},
 	.probe = max96724_probe,
 	.remove = max96724_remove,
+	.shutdown = max96724_shutdown,
 };
 
 module_i2c_driver(max96724_i2c_driver);

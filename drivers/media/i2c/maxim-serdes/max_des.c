@@ -3418,5 +3418,48 @@ int max_des_remove(struct max_des *des)
 }
 EXPORT_SYMBOL_NS_GPL(max_des_remove, "MAX_SERDES");
 
+void max_des_shutdown(struct max_des *des)
+{
+	struct max_des_priv *priv = des->priv;
+	struct i2c_adapter *adapter = priv->client->adapter;
+	unsigned int i;
+
+	/*
+	 * On an orderly warm reboot the kernel calls .shutdown (not .remove),
+	 * so the GMSL link is still up but each remote serializer is left in
+	 * its programmed, streaming state. After the reboot the deserializer
+	 * is reset while the serializers are not, so the reverse control
+	 * channel cannot reach them and the next probe fails with -EREMOTEIO
+	 * (-121). Issue a RESET_ALL to every attached serializer while the
+	 * link is still healthy: this is the software equivalent of toggling
+	 * PWDNB and returns the serializer to its clean power-up state, so the
+	 * following boot enumerates exactly like a cold power cycle.
+	 */
+	for (i = 0; i < des->ops->num_links; i++) {
+		struct max_des_link *link = &des->links[i];
+		int ret;
+
+		if (!link->ser_xlate.en)
+			continue;
+
+		if (des->ops->select_links) {
+			ret = des->ops->select_links(des, BIT(link->index));
+			if (ret) {
+				dev_warn(priv->dev,
+					 "shutdown: select link %u failed: %d\n",
+					 link->index, ret);
+				continue;
+			}
+		}
+
+		ret = max_ser_reset(adapter, link->ser_xlate.dst);
+		if (ret)
+			dev_warn(priv->dev,
+				 "shutdown: reset serializer 0x%02x failed: %d\n",
+				 link->ser_xlate.dst, ret);
+	}
+}
+EXPORT_SYMBOL_NS_GPL(max_des_shutdown, "MAX_SERDES");
+
 MODULE_LICENSE("GPL");
 MODULE_IMPORT_NS("I2C_ATR");

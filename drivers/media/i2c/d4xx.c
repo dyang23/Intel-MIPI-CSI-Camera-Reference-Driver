@@ -823,6 +823,59 @@ static const struct ds5_format ds5_onsemi_rgb_format = {
 };
 #define DS5_ONSEMI_RGB_N_FORMATS 1
 
+/*
+ * D40X (RealSense D405) format tables. Ported from
+ * realsense_mipi_platform_driver kernel/realsense/d4xx.c, final form with the
+ * "Add format YUYV to IR for D405 GMSL" change reverted (commit a024987): the
+ * IR table carries plain Y8 + Y8I only, with no custom 0x32/0x2F data types.
+ * Depth Z16 is carried over CSI as UYVY422 (0x1e) as on the other SKUs.
+ */
+static const struct ds5_format ds5_depth_formats_d40x[] = {
+	{
+		.data_type = GMSL_CSI_DT_YUV422_8,	/* Z16 */
+		.mbus_code = MEDIA_BUS_FMT_UYVY8_1X16,
+		.n_resolutions = ARRAY_SIZE(d40x_depth_sizes),
+		.resolutions = d40x_depth_sizes,
+	}, {
+		.data_type = GMSL_CSI_DT_RAW_8,	/* Y8 */
+		.mbus_code = MEDIA_BUS_FMT_Y8_1X8,
+		.n_resolutions = ARRAY_SIZE(d40x_depth_sizes),
+		.resolutions = d40x_depth_sizes,
+	}, {
+		.data_type = GMSL_CSI_DT_RGB_888,	/* 24-bit Calibration */
+		.mbus_code = MEDIA_BUS_FMT_RGB888_1X24,	/* FIXME */
+		.n_resolutions = ARRAY_SIZE(d40x_calibration_sizes),
+		.resolutions = d40x_calibration_sizes,
+	},
+};
+
+static const struct ds5_format ds5_y_formats_40x[] = {
+	{
+		/* First format: default */
+		.data_type = GMSL_CSI_DT_RAW_8,	/* Y8 */
+		.mbus_code = MEDIA_BUS_FMT_Y8_1X8,
+		.n_resolutions = ARRAY_SIZE(d40x_y8_sizes),
+		.resolutions = d40x_y8_sizes,
+	}, {
+		.data_type = GMSL_CSI_DT_YUV422_8,	/* Y8I */
+		.mbus_code = MEDIA_BUS_FMT_VYUY8_1X16,
+		.n_resolutions = ARRAY_SIZE(d40x_y8_sizes),
+		.resolutions = d40x_y8_sizes,
+	}, {
+		.data_type = GMSL_CSI_DT_RGB_888,	/* Y12I, 24-bit Calibration */
+		.mbus_code = MEDIA_BUS_FMT_RGB888_1X24,
+		.n_resolutions = ARRAY_SIZE(d40x_calibration_sizes),
+		.resolutions = d40x_calibration_sizes,
+	},
+};
+
+static const struct ds5_format ds5_40x_rgb_format = {
+	.data_type = GMSL_CSI_DT_YUV422_8,	/* UYVY */
+	.mbus_code = MEDIA_BUS_FMT_YUYV8_1X16,
+	.n_resolutions = ARRAY_SIZE(d40x_rgb_sizes),
+	.resolutions = d40x_rgb_sizes,
+};
+
 static const struct ds5_variant ds5_variants[] = {
 	[DS5_DS5U] = {
 		.formats = ds5_y_formats_ds5u,

@@ -445,6 +445,7 @@ static const u16 ds5_framerate_to_60[] = {5, 15, 30, 60};
 static const u16 ds5_framerate_to_90[] = {5, 15, 30, 60, 90};
 static const u16 ds5_framerate_100[] = {100};
 static const u16 ds5_framerate_90[] = {90};
+static const u16 ds5_framerate_15_25[] = {15, 25};
 static const u16 ds5_imu_framerates[] = {50, 100, 200, 400};
 
 static const struct ds5_reg ds5_init_reg[] = {
@@ -490,6 +491,42 @@ static const struct ds5_reg_list ds5_1920_1080_30fps_reg_list = {
 static const struct ds5_reg_list ds5_1280_720_30fps_reg_list = {
 	.num_of_regs = ARRAY_SIZE(ds5_1280_720_30fps_reg),
 	.regs = ds5_1280_720_30fps_reg,
+};
+
+/*
+ * D40X (RealSense D405) resolution tables. Ported from
+ * realsense_mipi_platform_driver kernel/realsense/d4xx.c (final form after
+ * commits a59cd24 / 3a04b6d / 1042ec0 / 445be76 / 81248d8). The DS5_RES macro
+ * uses designated initializers, so it is compatible with this driver's
+ * struct ds5_resolution layout (the extra .code field stays 0, matching the
+ * other depth tables here).
+ */
+#define DS5_RES(w, h, fr) \
+	{ .width = (w), .height = (h), .framerates = (fr), .n_framerates = ARRAY_SIZE(fr) },
+
+#define D401_COMMON_RES	\
+	DS5_RES(1280, 720, ds5_framerate_to_30)\
+	DS5_RES(848, 480, ds5_framerate_to_60)\
+	DS5_RES(640, 480, ds5_framerate_to_60)\
+	DS5_RES(640, 360, ds5_framerate_to_60)\
+	DS5_RES(480, 270, ds5_framerate_to_60)\
+	DS5_RES(424, 240, ds5_framerate_to_60)
+
+static const struct ds5_resolution d40x_depth_sizes[] = {
+	D401_COMMON_RES
+	DS5_RES(256, 144, ds5_framerate_90)
+};
+
+static const struct ds5_resolution d40x_y8_sizes[] = {
+	D401_COMMON_RES
+};
+
+static const struct ds5_resolution d40x_rgb_sizes[] = {
+	D401_COMMON_RES
+};
+
+static const struct ds5_resolution d40x_calibration_sizes[] = {
+	DS5_RES(1288, 808, ds5_framerate_15_25)
 };
 
 static const struct ds5_resolution d43x_depth_sizes[] = {

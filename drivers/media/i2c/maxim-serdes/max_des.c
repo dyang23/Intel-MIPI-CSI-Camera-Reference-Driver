@@ -2665,14 +2665,28 @@ static int max_des_enable_streams(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_state *state,
 				  u32 pad, u64 streams_mask)
 {
-	return max_des_update_streams(sd, state, pad, streams_mask, true);
+	int ret = max_des_update_streams(sd, state, pad, streams_mask, true);
+
+	if (ret)
+		dev_err(sd->dev,
+			"enable_streams failed (pad %u, streams 0x%llx): %d\n",
+			pad, streams_mask, ret);
+
+	return ret;
 }
 
 static int max_des_disable_streams(struct v4l2_subdev *sd,
 				   struct v4l2_subdev_state *state,
 				   u32 pad, u64 streams_mask)
 {
-	return max_des_update_streams(sd, state, pad, streams_mask, false);
+	int ret = max_des_update_streams(sd, state, pad, streams_mask, false);
+
+	if (ret)
+		dev_err(sd->dev,
+			"disable_streams failed (pad %u, streams 0x%llx): %d\n",
+			pad, streams_mask, ret);
+
+	return ret;
 }
 
 static int max_des_init_state(struct v4l2_subdev *sd,

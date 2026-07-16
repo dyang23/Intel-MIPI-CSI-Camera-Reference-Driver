@@ -214,6 +214,11 @@ int max_serdes_xlate_enable_disable_streams(struct max_serdes_source *sources,
 							  updated_sink_streams_mask);
 		if (ret) {
 			failed_sink_pad = i;
+			dev_err(source->sd->dev,
+				"failed to %s streams on downstream '%s' (sink pad %u, streams 0x%llx): %d\n",
+				enable ? "enable" : "disable",
+				source->sd->name, i, updated_sink_streams_mask,
+				ret);
 			goto err;
 		}
 	}

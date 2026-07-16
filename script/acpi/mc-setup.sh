@@ -792,7 +792,10 @@ for k in "${!CFG_LINKS[@]}"; do
 
         case "$model" in
             d4xx)
-                media-ctl -V "\"D4XX ${s} ${cam}\":0 [fmt:${fmt}/${size} field:none]"
+                # Each "D4XX <stream>" is its own subdev with a single stream on
+                # pad 0. media-ctl (streams API) rejects the bare ":0" pad form
+                # for these subdevs, so use the pad/stream form ":0/0".
+                media-ctl -V "\"D4XX ${s} ${cam}\":0/0 [fmt:${fmt}/${size} field:none]"
                 ;;
             isx031)
                 media-ctl -V "\"isx031 ${cam}\":0/${idx} [fmt:${fmt}/${size} field:none]"

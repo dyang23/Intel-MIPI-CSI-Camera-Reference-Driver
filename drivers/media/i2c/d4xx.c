@@ -829,9 +829,22 @@ static const struct ds5_format ds5_onsemi_rgb_format = {
  * "Add format YUYV to IR for D405 GMSL" change reverted (commit a024987): the
  * IR table carries plain Y8 + Y8I only, with no custom 0x32/0x2F data types.
  * Depth Z16 is carried over CSI as UYVY422 (0x1e) as on the other SKUs.
+ *
+ * The first entry MUST advertise MEDIA_BUS_FMT_FIXED (same as D43X/D45X): the
+ * IPU6/IPU7 librealsense backend maps the subdev's mbus code to a fourcc, and
+ * ONLY MEDIA_BUS_FMT_FIXED -> V4L2_PIX_FMT_Z16 (i.e. depth). If the depth
+ * subdev instead advertises UYVY8_1X16 first, librealsense maps it to
+ * V4L2_PIX_FMT_UYVY and classifies the depth stream as INFRARED, so no Z16
+ * depth profile is generated (was the D405/D401_GMSL "only color/IR, no depth"
+ * bug). The wire data type stays YUV422_8 (0x1e) either way.
  */
 static const struct ds5_format ds5_depth_formats_d40x[] = {
 	{
+		.data_type = GMSL_CSI_DT_YUV422_8,	/* Z16 */
+		.mbus_code = MEDIA_BUS_FMT_FIXED,
+		.n_resolutions = ARRAY_SIZE(d40x_depth_sizes),
+		.resolutions = d40x_depth_sizes,
+	}, {
 		.data_type = GMSL_CSI_DT_YUV422_8,	/* Z16 */
 		.mbus_code = MEDIA_BUS_FMT_UYVY8_1X16,
 		.n_resolutions = ARRAY_SIZE(d40x_depth_sizes),
@@ -2629,8 +2642,15 @@ static int ds5_sensor_config_init(struct i2c_client *client, struct ds5 *ds5)
 	/* initialize ir sensor formats */
 	sensor = &ds5->ir.sensor;
 
-	sensor->formats = ds5->variant->formats;
-	sensor->n_formats = ds5->variant->n_formats;
+	switch (dev_type) {
+	case DS5_DEVICE_TYPE_D40X:
+		sensor->formats = ds5_y_formats_40x;
+		sensor->n_formats = ARRAY_SIZE(ds5_y_formats_40x);
+		break;
+	default:
+		sensor->formats = ds5->variant->formats;
+		sensor->n_formats = ds5->variant->n_formats;
+	}
 	sensor->mux_pad = DS5_MUX_PAD_IR;
 
 	/* initialize rgb sensor formats */
@@ -2640,6 +2660,10 @@ static int ds5_sensor_config_init(struct i2c_client *client, struct ds5 *ds5)
 	case DS5_DEVICE_TYPE_D46X:
 		sensor->formats = &ds5_onsemi_rgb_format;
 		sensor->n_formats = DS5_ONSEMI_RGB_N_FORMATS;
+		break;
+	case DS5_DEVICE_TYPE_D40X:
+		sensor->formats = &ds5_40x_rgb_format;
+		sensor->n_formats = DS5_RLT_RGB_N_FORMATS;
 		break;
 	case DS5_DEVICE_TYPE_D45X:
 		sensor->formats = &ds5_rlt_rgb_format;
@@ -2705,6 +2729,9 @@ static int ds5_sensor_config_init(struct i2c_client *client, struct ds5 *ds5)
 		break;
 	case DS5_DEVICE_TYPE_D46X:
 		sensor->formats = ds5_depth_formats_d46x;
+		break;
+	case DS5_DEVICE_TYPE_D40X:
+		sensor->formats = ds5_depth_formats_d40x;
 		break;
 	default:
 		sensor->formats = ds5_depth_formats_d46x;
@@ -3265,26 +3292,46 @@ static int ds5_get_calibration_data(struct ds5 *state, enum table_id id,
 	cmd->param1 = id;
 	ds5_raw_write_with_check(state, 0x4900, cmd, sizeof(struct hwm_cmd));
 	ds5_write_with_check(state, 0x490c, 0x01); /* execute cmd */
+	/* Poll while reads succeed (!ret) and the command is in progress. */
 	do {
 		if (retries != 3)
 			msleep_range(10);
 		ret = ds5_read(state, 0x4904, &status);
-	} while (ret && retries-- && status != 0);
+	} while (!ret && retries-- && status != 0);
 
 	if (ret || status != 0) {
 		dev_err(&state->client->dev,
 				"%s(): Failed to get calibration table %d, fw error: %x\n",
 				__func__, id, status);
 		devm_kfree(&state->client->dev, cmd);
-		return status;
+		return ret ? ret : status;
 	}
 
 	// get table length from fw
-	ret = regmap_raw_read(state->regmap, 0x4908,
-			&table_length, sizeof(table_length));
+	ret = ds5_read(state, DS5_HWMC_RESP_LEN, &table_length);
+	if (ret) {
+		devm_kfree(&state->client->dev, cmd);
+		return ret;
+	}
+
+	/* Never issue a zero-length raw read (-EINVAL / "-22"). */
+	if (table_length == 0) {
+		dev_dbg(&state->client->dev,
+			"%s(): calib table length is 0 (id %d)\n", __func__, id);
+		devm_kfree(&state->client->dev, cmd);
+		return -ENODATA;
+	}
+
+	/* Clamp so a large FW length can't overrun cmd->Data (length + 4). */
+	if (table_length > length + 4)
+		table_length = length + 4;
 
 	// read table
-	ds5_raw_read_with_check(state, 0x4900, cmd->Data, table_length);
+	ret = ds5_raw_read(state, DS5_HWMC_DATA, cmd->Data, table_length);
+	if (ret) {
+		devm_kfree(&state->client->dev, cmd);
+		return ret;
+	}
 
 	// first 4 bytes are opcode HWM, not part of calibration table
 	memcpy(table, cmd->Data + 4, length);
@@ -3378,6 +3425,19 @@ static int ds5_get_hwmc(struct ds5 *state, unsigned char *data,
 			"%s: HWMC response length too big: %d > %d\n",
 			__func__, tmp_len, cmdDataLen);
 		return -ENOBUFS;
+	}
+
+	/*
+	 * A zero-length response means the HWMC command has not actually
+	 * completed (status read back a stale OK from a previous command).
+	 * Never issue a zero-length regmap_raw_read() - it returns -EINVAL
+	 * ("regmap raw read failed: -22"). Report no-data instead. Ported
+	 * from realsense_mipi_platform_driver ds5_get_hwmc().
+	 */
+	if (tmp_len == 0) {
+		dev_dbg(&state->client->dev,
+			"%s: HWMC response length is 0\n", __func__);
+		return -ENODATA;
 	}
 
 	dev_dbg(&state->client->dev,
@@ -3779,22 +3839,51 @@ static int ds5_gvd(struct ds5 *state, unsigned char *data)
 	memcpy(&cmd, &gvd, sizeof(gvd));
 	ds5_raw_write_with_check(state, 0x4900, &cmd, sizeof(cmd));
 	ds5_write_with_check(state, 0x490c, 0x01); /* execute cmd */
+	/*
+	 * Poll while the read succeeds (!ret) and the command is still
+	 * in progress (status != 0). The previous condition (ret && ...)
+	 * exited on the first successful read, so under back-to-back HWMC
+	 * traffic the length register could be read before the FW populated
+	 * it, yielding a zero-length raw read (-EINVAL / -22).
+	 */
 	do {
 		if (retries != 3)
 			msleep_range(10);
 
 		ret = ds5_read(state, 0x4904, &status);
-	} while (ret && retries-- && status != 0);
+	} while (!ret && retries-- && status != 0);
 
 	if (ret || status != 0) {
 		dev_err(&state->client->dev,
 				"%s(): Failed to read GVD, HWM cmd status: %x\n",
 				__func__, status);
-		return status;
+		return ret ? ret : status;
 	}
 
-	ret = regmap_raw_read(state->regmap, 0x4908, &length, sizeof(length));
-	ds5_raw_read_with_check(state, 0x4900, data, length);
+	ret = ds5_read(state, DS5_HWMC_RESP_LEN, &length);
+	if (ret)
+		return ret;
+
+	/*
+	 * A zero length means the command has not actually completed; never
+	 * issue a zero-length raw read (regmap returns -EINVAL / "-22").
+	 */
+	if (length == 0) {
+		dev_dbg(&state->client->dev,
+			"%s(): GVD response length is 0\n", __func__);
+		return -ENODATA;
+	}
+
+	/*
+	 * The FW GVD response can be longer than the GVD control payload
+	 * (ds5_ctrl_gvd .dims = {239}); clamp the read so it never overruns
+	 * the caller's buffer. librealsense only needs the header/PID which
+	 * live at the start of the blob.
+	 */
+	if (length > 239)
+		length = 239;
+
+	ds5_raw_read_with_check(state, DS5_HWMC_DATA, data, length);
 
 	dev_dbg(&state->client->dev, "%s: exit\n", __func__);
 	return ret;

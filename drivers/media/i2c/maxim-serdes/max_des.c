@@ -1714,6 +1714,7 @@ static int max_des_ser_attach_addr(struct max_des_priv *priv, u32 chan_id,
 {
 	struct max_des *des = priv->des;
 	struct max_des_link *link = &des->links[chan_id];
+	unsigned int backoff_ms;
 	int i, min, max;
 	int ret = 0;
 
@@ -1735,8 +1736,24 @@ static int max_des_ser_attach_addr(struct max_des_priv *priv, u32 chan_id,
 				return ret;
 		}
 
-		ret = max_des_init_link_ser_xlate(priv, link, priv->client->adapter,
-						  addr, alias);
+		/*
+		 * Retry the whole link bring-up with exponential backoff.
+		 * max_des_init_link_ser_xlate() re-issues select_links (and thus
+		 * the one-shot link reset) on every call, so a marginal GMSL
+		 * link that fails to lock on the first attempt gets a fresh
+		 * relock. The old max9x driver self-healed the same way
+		 * (32..512 ms); without this a single marginal attempt gives up
+		 * and the camera never enumerates.
+		 */
+		for (backoff_ms = 32; ; backoff_ms <<= 1) {
+			ret = max_des_init_link_ser_xlate(priv, link,
+							  priv->client->adapter,
+							  addr, alias);
+			if (!ret || backoff_ms > 512)
+				break;
+
+			msleep(backoff_ms);
+		}
 		if (!ret)
 			break;
 	}

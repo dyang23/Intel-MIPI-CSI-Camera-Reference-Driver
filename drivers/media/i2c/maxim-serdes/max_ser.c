@@ -2373,7 +2373,18 @@ int max_ser_reset(struct i2c_adapter *adapter, u8 addr)
 
 	val |= MAX_SER_CTRL0_RESET_ALL;
 
-	return max_ser_write_reg(adapter, addr, MAX_SER_CTRL0, val);
+	ret = max_ser_write_reg(adapter, addr, MAX_SER_CTRL0, val);
+	if (ret)
+		return ret;
+
+	/*
+	 * The serializer needs time to complete RESET_ALL before it is
+	 * accessed again. The old max9295 driver waited 45 ms; without any
+	 * delay the following access can hit the chip mid-reset.
+	 */
+	msleep(45);
+
+	return 0;
 }
 
 int max_ser_wait_for_multiple(struct i2c_adapter *adapter, u8 *addrs,

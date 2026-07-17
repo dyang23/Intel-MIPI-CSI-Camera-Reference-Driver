@@ -275,7 +275,12 @@ static int max96724_reset(struct max96724_priv *priv)
 	if (ret)
 		return ret;
 
-	fsleep(10000);
+	/*
+	 * Allow the deserializer to fully settle after RESET_ALL. The old
+	 * max9x driver waited 100 ms here; the 10 ms used previously was too
+	 * short and contributed to intermittent bring-up.
+	 */
+	fsleep(100000);
 
 	return max96724_wait_for_device(priv);
 }

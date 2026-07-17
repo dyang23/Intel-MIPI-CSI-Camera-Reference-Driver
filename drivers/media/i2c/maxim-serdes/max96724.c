@@ -441,11 +441,32 @@ static int max96724_init_tpg(struct max_des *des)
 	return regmap_multi_reg_write(priv->regmap, regs, ARRAY_SIZE(regs));
 }
 
+/*
+ * Errata #5 (MAX96724/F/R rev 1): the GMSL2 link requires these RLMS
+ * (reverse-link) block register writes for robust 6 Gbps operation.
+ * One register per PHY, stride 0x100 (PHY0..PHY3). Without them the
+ * 6 Gbps link and its embedded reverse control channel are marginal,
+ * causing intermittent link lock / -EREMOTEIO / -EIO across power cycles.
+ * Ref: max96724-f-r-rev1-b-0a-errata.pdf.
+ */
+static const struct reg_sequence max96724_errata_rev1[] = {
+	{ 0x1449, 0x75 },
+	{ 0x1549, 0x75 },
+	{ 0x1649, 0x75 },
+	{ 0x1749, 0x75 },
+};
+
 static int max96724_init(struct max_des *des)
 {
 	struct max96724_priv *priv = des_to_priv(des);
 	unsigned int i;
 	int ret;
+
+	/* Apply the rev1 6 Gbps robustness errata before bringing links up. */
+	ret = regmap_multi_reg_write(priv->regmap, max96724_errata_rev1,
+				     ARRAY_SIZE(max96724_errata_rev1));
+	if (ret)
+		return ret;
 
 	if (priv->info->set_pipe_tunnel_enable) {
 		for (i = 0; i < des->ops->num_pipes; i++) {

@@ -37,6 +37,11 @@
 #define MAX96724_CTRL1				0x18
 #define MAX96724_CTRL1_RESET_ONESHOT		GENMASK(3, 0)
 
+/* Per-link GMSL lock status: link 0 in CTRL3 (0x1a), links 1..3 at 0x0a.. */
+#define MAX96724_LINK_LOCK(link)		((link) == 0 ? 0x1a : 0x0a + ((link) - 1))
+#define MAX96724_LINK_LOCK_LOCKED		BIT(3)
+#define MAX96724_LINK_LOCK_TIMEOUT_MS		200
+
 #define MAX96724_VIDEO_PIPE_SEL(p)		(0xf0 + (p) / 2)
 #define MAX96724_VIDEO_PIPE_SEL_STREAM(p)	(GENMASK(1, 0) << (4 * ((p) % 2)))
 #define MAX96724_VIDEO_PIPE_SEL_LINK(p)		(GENMASK(3, 2) << (4 * ((p) % 2)))
@@ -889,6 +894,7 @@ static int max96724_set_pipe_tunnel_enable(struct max_des *des,
 static int max96724_select_links(struct max_des *des, unsigned int mask)
 {
 	struct max96724_priv *priv = des_to_priv(des);
+	unsigned int link;
 	int ret;
 
 	ret = regmap_update_bits(priv->regmap, MAX96724_REG6, MAX96724_REG6_LINK_EN,
@@ -901,7 +907,34 @@ static int max96724_select_links(struct max_des *des, unsigned int mask)
 	if (ret)
 		return ret;
 
-	msleep(60);
+	/*
+	 * Wait for each selected link to report lock before returning, so the
+	 * caller does not touch the GMSL reverse control channel (serializer /
+	 * remote sensor) before it is up - doing so previously caused
+	 * intermittent -EREMOTEIO / -EIO. This replaces the previous fixed
+	 * 60 ms wait. Best-effort: a selected link with no device attached
+	 * simply times out here without failing the call.
+	 */
+	for (link = 0; link < des->ops->num_links; link++) {
+		unsigned int val;
+		int i;
+
+		if (!(mask & BIT(link)))
+			continue;
+
+		for (i = 0; i < MAX96724_LINK_LOCK_TIMEOUT_MS / 10; i++) {
+			ret = regmap_read(priv->regmap,
+					  MAX96724_LINK_LOCK(link), &val);
+			if (!ret && (val & MAX96724_LINK_LOCK_LOCKED))
+				break;
+
+			msleep(10);
+		}
+
+		if (i == MAX96724_LINK_LOCK_TIMEOUT_MS / 10)
+			dev_dbg(priv->dev,
+				"link %u not locked after one-shot reset\n", link);
+	}
 
 	return 0;
 }

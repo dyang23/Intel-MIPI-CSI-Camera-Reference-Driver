@@ -64,8 +64,48 @@ declare -A DES_PREFIX=(
 
 # -------- low-level helpers ---------------------------------------------------
 
+# Cached 'media-ctl -p' topology, used only by the internal-subdev fallback
+# below. Populated lazily so systems that never need the fallback pay nothing.
+_MC_TOPO_CACHE=""
+_mc_topo() {
+    [ -n "$_MC_TOPO_CACHE" ] || _MC_TOPO_CACHE=$(media-ctl -p 2>/dev/null)
+    printf '%s\n' "$_MC_TOPO_CACHE"
+}
+
+# Fallback bus-addr lookup for driver stacks where the SER/CAM (and sometimes
+# DES) subdev is registered as an *internal* subdev of the deserializer's
+# v4l2_device (e.g. the maxim-serdes max96724/max96717/isx031 stack). Such
+# subdevs never create a /dev/v4l-subdev nor a video4linux node under their own
+# ACPI device, so acpi_busaddr()'s primary lookup finds nothing -- but the
+# subdev still exists in the media graph as "<prefix> <adapter>-<addr>".
+#
+# We derive <adapter> from the i2c bus the ACPI device physically sits on
+# (the "i2c-<N>" directory immediately above the i2c client in sysfs) and then
+# resolve the full "<adapter>-<addr>" by matching that adapter against the
+# live media topology. Returns 1 if nothing matches (caller then skips as
+# before), so this is purely additive and cannot change the result for stacks
+# whose subdevs are discoverable via the primary v4l-subdev path.
+acpi_busaddr_from_media() {
+    local acpi_dir=$1 prefix=$2
+    local node link parent adapter ba
+    for node in "$acpi_dir"/physical_node*; do
+        [ -e "$node" ] || continue
+        link=$(readlink -f "$node") || continue
+        parent=${link%/*}                 # strip the i2c client leaf
+        case "$parent" in
+            */i2c-[0-9]*) adapter=${parent##*/i2c-} ;;
+            *) continue ;;
+        esac
+        [[ $adapter =~ ^[0-9]+$ ]] || continue
+        ba=$(_mc_topo | grep -oP "\b${prefix} \K${adapter}-[0-9a-f]+" | head -1)
+        [ -n "$ba" ] && { echo "$ba"; return 0; }
+    done
+    return 1
+}
+
 # Read "bus-addr" (e.g. 18-0010) from any v4l-subdev whose name starts with
-# the given prefix, under any physical_node* of an ACPI sysfs dir.
+# the given prefix, under any physical_node* of an ACPI sysfs dir. Falls back
+# to the live media topology for internal-subdev driver stacks (see above).
 acpi_busaddr() {
     local acpi_dir=$1 prefix=$2
     local f
@@ -75,7 +115,7 @@ acpi_busaddr() {
         local ba; ba=$(printf '%s\n' "$name" | grep -oP "^${prefix} \K[0-9]+-[0-9a-f]+" | head -1)
         [ -n "$ba" ] && { echo "$ba"; return 0; }
     done
-    return 1
+    acpi_busaddr_from_media "$acpi_dir" "$prefix"
 }
 
 # Find the ACPI sysfs dir whose `path` file matches a given namespace path.

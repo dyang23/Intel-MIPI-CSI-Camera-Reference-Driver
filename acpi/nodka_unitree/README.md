@@ -112,6 +112,79 @@ Link 3 (port D) ─────┤ CH03 → SER3 @0x40 ─ S36        │
 
 ---
 
+### 4. `NDK_unitree_max96724_d457.asl` — D457 单口（已验证工作）
+
+**Camera 拓扑：**
+
+```
+                     MAX96724 (DES, @0x27, I2C0)
+                     ┌────────────────────────────┐
+Link 0 (port A) ─────┤ CH00 → SER0 (MAX9295A)     ├──→ PHY0 (cphy A)
+   └─ CAM0 D457       │  └─ CAM0 (i2c alias 0x54) │            │
+                     │                            │            ↓
+                     │  Link 1/2/3 未配置          │       MIPI port 0
+                     └────────────────────────────┘
+```
+
+- 只在 **port A (Link 0)** 上启用 1×D457（MAX9295A + D4xx，HID `INTC10CD`），camera alias `0x54`
+- D457 是原生 GMSL 相机，串行器为 **MAX9295A**（单 PHY，`INTC1138`），用 `_des_ch_common_d457.asl` → `_ser_common_max9295.asl` + `_cam_common_d457.asl`
+
+---
+
+### 5. `NDK_unitree_max96724_d457_d405.asl` — D457 + D405 双口
+
+**Camera 拓扑：**
+
+```
+                     MAX96724 (DES, @0x27, I2C0)
+                     ┌────────────────────────────┐
+Link 0 (port A) ─────┤ CH00 → SER0 (MAX9295A)     ├──→ PHY0 (cphy A)
+   └─ CAM0 D457       │  └─ CAM0 (i2c alias 0x54) │            │
+Link 1 (port B) ─────┤ CH01 → SER1 (MAX9295A)     │            ↓
+   └─ CAM1 D405       │  └─ CAM1 (i2c alias 0x55) │       MIPI port 0
+                     └────────────────────────────┘
+```
+
+- 在 **port A (Link 0)** 上是 D457、**port B (Link 1)** 上是 D405，两者共用同一颗 MAX96724
+- 两条 Link 都被 DES 汇聚到 **同一个输出 PHY0 (cphy A) → MIPI port 0**，由反序列化器按 virtual channel 区分两路数据
+- D457 与 D405 在 ACPI 层完全同构（都是 `INTC10CD` D4XX，MAX9295A 串行器，2 lane）——`d4xx` 驱动在运行时通过 I²C 读相机自身身份来区分具体型号，并强制 2 lane。因此 D405 直接复用 `_des_ch_common_d457.asl` 模板，只是换到 Link 1、camera alias 用 `0x55`（避免与 D457 的 `0x54` 冲突）
+- **待确认：** D405 侧的串行器是否确实是 MAX9295A。若实测 dmesg 显示串行器 probe 失败或型号不符，只需把 Link 1 那一段的 `#include "../_des_ch_common_d457.asl"` 换成对应串行器模板即可，其余不动
+- **VC 冲突：** 两路都用本地 VC 0/1/2/3，靠 MAX96724 按 Link 做 VC remap 区分（与 mixed S36+3H 配置同套机制）。若出图后两路互相串扰，检查 `max_ser` 的 per-PHY pipe/VC remap（见 s36-DongYang 分支相关 commit）
+
+---
+
+### 6. `NDK_unitree_max96724_d457_d457_ac.asl` — 双 D457（port A + port C）
+
+**Camera 拓扑：**
+
+```
+                     MAX96724 (DES, @0x27, I2C0)
+                     ┌────────────────────────────┐
+Link 0 (port A) ─────┤ CH00 → SER0 (MAX9295A)     ├──→ PHY0 (cphy A)
+   └─ CAM0 D457       │  └─ CAM0 (alias 0x54)     │            │
+   (本地 VC 0/1/2/3)  │                            │            ↓
+Link 2 (port C) ─────┤ CH02 → SER2 (MAX9295A)     │       MIPI port 0
+   └─ CAM2 D457       │  └─ CAM2 (alias 0x56)     │
+   (本地 VC 0/1/2/3)  └────────────────────────────┘
+```
+
+- 在 **port A (Link 0)** 和 **port C (Link 2)** 上各挂 1×D457，两者共用同一颗 MAX96724，
+  都汇聚到 **同一个输出 PHY0 (cphy A) → MIPI port 0**。目标是**同时**跑两台的 RGB + Depth。
+- 两台完全同构（`INTC10CD` D4XX + MAX9295A，2 lane），都复用 `_des_ch_common_d457.asl`。
+- **VC 只有 4 个（0-3），不是 8 个！** 整个 serdes 栈以 `MAX_SERDES_VC_ID_NUM = 4`
+  （`drivers/media/i2c/maxim-serdes/max_serdes.h`）为硬上限：`max_des.c`/`max_ser.c` 拒绝 VC≥4
+  （`-E2BIG`），`d4xx.c` 的 `vc_to_sensor()` 只认 VC0/1/2/3 = depth/rgb/ir/imu。
+- **不要在 ASL 里手动分 VC。** 两台都用本地 VC 0/1/2/3，由 `max_ser` 驱动自动 remap
+  （`max_ser_assign_vc_remaps()`：第一个 pipe 保留原 VC，撞车的 pipe 用 `ffz` 取最低空闲 VC）。
+- **硬限制：一个输出 PHY 总共只有 4 个 VC 槽。** 两台 D457 各跑 **depth+rgb = 4 路 = 正好占满
+  VC0-3**，这正是本文件支持的目标。**若两台再同时开 IR 或 IMU，总流数 > 4，多出来的会
+  `No free VC ID ... skipping remap` 收不到图。** 同时用两台时，每台只开 depth+rgb。
+- **alias：** SER 侧由 `DESCH_LINK_NUM` 自动分配（Link 0→0x44，Link 2→0x46）；camera alias 手动分 0x54 / 0x56。
+- **port C 假设：** 若实测 D457 不在 port C（Link 2），把该整段的 `DESCH_LINK_NUM / CH0x / SER x / *_PATH`
+  改成实际 Link 号即可（可先用 `NDK_unitree_max96724_s36_scan_all_links.asl` 思路确认接头对应的 Link）。
+
+---
+
 ## 编译
 
 在仓库根目录：

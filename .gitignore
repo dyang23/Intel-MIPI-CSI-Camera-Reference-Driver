@@ -1,0 +1,26 @@
+# ---- ACPI / SSDT build intermediates ----
+acpi/build/
+*.aml
+*.i
+*.dsl
+*.asl.bak*
+img_ssdt.img
+
+# ---- Kernel module build artifacts ----
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+*.symvers
+*.order
+.tmp_versions/
+
+# ---- Temporary patches ----
+my_patches/
+*.patch
+
+# ---- Editor / OS junk ----
+*.swp
+*~
+.DS_Store

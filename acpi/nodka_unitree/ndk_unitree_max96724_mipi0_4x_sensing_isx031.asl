@@ -114,6 +114,29 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
              * file uses.
              */
             #define DES_PIPE_STR_AUTOSELECT 0
+            /*
+             * Frame sync group: the four ISX031 modules are used as one
+             * surround view set, so they share a common shutter.
+             *
+             * The MAX96724 generates a 30Hz pulse off its 25MHz crystal and
+             * pushes it into GMSL GPIO tunnel channel 0x0A directly, without
+             * going through one of its own pins. Each MAX9295A reproduces that
+             * channel on its MFP7 (DESCH_SER_GPIO_RX_PIN /
+             * DESCH_SER_GPIO_RX_ID below), which is wired to the sensor's FSIN
+             * input, and each ISX031 is put in external pulse mode by
+             * DESCH_CAM_EXTERNAL_SYNC.
+             *
+             * The serializer MFP7 is therefore no longer a host driven GPIO:
+             * the previous DESCH_SER_EXTRA_GPIO_PIN / DESCH_CAM_FSIN_GPIO pair
+             * only ever held the line statically low, which left the sensors
+             * free running and out of phase with each other.
+             *
+             * Keep DES_FSYNC_TX_ID and every DESCH_SER_GPIO_RX_ID identical,
+             * they are the two ends of the same tunnel channel.
+             */
+            #define DES_FSYNC_FPS         30          /* Frames per second */
+            #define DES_FSYNC_TX_ID       0x0A        /* GMSL GPIO tunnel channel */
+            #define DES_FSYNC_LINK_MASK   0x0F        /* Links 0..3 */
             #include "../_des_common_max96724.asl"
 
             // ---- Sensing ISX031 #0 on GMSL input Link 0 (port A) ----
@@ -126,8 +149,9 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
             #define DESCH_SER_PATH "\\_SB.PC00.DES0.CH00.SER0"
             #define DESCH_SER_REF \_SB.PC00.DES0.CH00.SER0
             #define DESCH_SER_GPIOREF ^^SER0
-            #define DESCH_SER_EXTRA_GPIO_PIN 7
-            #define DESCH_CAM_FSIN_GPIO 1
+            #define DESCH_SER_GPIO_RX_PIN 7
+            #define DESCH_SER_GPIO_RX_ID 0x0A
+            #define DESCH_CAM_EXTERNAL_SYNC 1
             #define CAM_ALIAS 0x54
             #define CAM_LANES 4
             #include "../_des_ch_common_isx031.asl"
@@ -140,8 +164,9 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
             #undef DESCH_SER_PATH
             #undef DESCH_SER_REF
             #undef DESCH_SER_GPIOREF
-            #undef DESCH_SER_EXTRA_GPIO_PIN
-            #undef DESCH_CAM_FSIN_GPIO
+            #undef DESCH_SER_GPIO_RX_PIN
+            #undef DESCH_SER_GPIO_RX_ID
+            #undef DESCH_CAM_EXTERNAL_SYNC
             #undef CAM_ALIAS
             #undef CAM_LANES
 
@@ -155,8 +180,9 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
             #define DESCH_SER_PATH "\\_SB.PC00.DES0.CH01.SER1"
             #define DESCH_SER_REF \_SB.PC00.DES0.CH01.SER1
             #define DESCH_SER_GPIOREF ^^SER1
-            #define DESCH_SER_EXTRA_GPIO_PIN 7
-            #define DESCH_CAM_FSIN_GPIO 1
+            #define DESCH_SER_GPIO_RX_PIN 7
+            #define DESCH_SER_GPIO_RX_ID 0x0A
+            #define DESCH_CAM_EXTERNAL_SYNC 1
             #define CAM_ALIAS 0x55
             #define CAM_LANES 4
             #include "../_des_ch_common_isx031.asl"
@@ -169,8 +195,9 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
             #undef DESCH_SER_PATH
             #undef DESCH_SER_REF
             #undef DESCH_SER_GPIOREF
-            #undef DESCH_SER_EXTRA_GPIO_PIN
-            #undef DESCH_CAM_FSIN_GPIO
+            #undef DESCH_SER_GPIO_RX_PIN
+            #undef DESCH_SER_GPIO_RX_ID
+            #undef DESCH_CAM_EXTERNAL_SYNC
             #undef CAM_ALIAS
             #undef CAM_LANES
 
@@ -184,8 +211,9 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
             #define DESCH_SER_PATH "\\_SB.PC00.DES0.CH02.SER2"
             #define DESCH_SER_REF \_SB.PC00.DES0.CH02.SER2
             #define DESCH_SER_GPIOREF ^^SER2
-            #define DESCH_SER_EXTRA_GPIO_PIN 7
-            #define DESCH_CAM_FSIN_GPIO 1
+            #define DESCH_SER_GPIO_RX_PIN 7
+            #define DESCH_SER_GPIO_RX_ID 0x0A
+            #define DESCH_CAM_EXTERNAL_SYNC 1
             #define CAM_ALIAS 0x56
             #define CAM_LANES 4
             #include "../_des_ch_common_isx031.asl"
@@ -198,8 +226,9 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
             #undef DESCH_SER_PATH
             #undef DESCH_SER_REF
             #undef DESCH_SER_GPIOREF
-            #undef DESCH_SER_EXTRA_GPIO_PIN
-            #undef DESCH_CAM_FSIN_GPIO
+            #undef DESCH_SER_GPIO_RX_PIN
+            #undef DESCH_SER_GPIO_RX_ID
+            #undef DESCH_CAM_EXTERNAL_SYNC
             #undef CAM_ALIAS
             #undef CAM_LANES
 
@@ -213,8 +242,9 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
             #define DESCH_SER_PATH "\\_SB.PC00.DES0.CH03.SER3"
             #define DESCH_SER_REF \_SB.PC00.DES0.CH03.SER3
             #define DESCH_SER_GPIOREF ^^SER3
-            #define DESCH_SER_EXTRA_GPIO_PIN 7
-            #define DESCH_CAM_FSIN_GPIO 1
+            #define DESCH_SER_GPIO_RX_PIN 7
+            #define DESCH_SER_GPIO_RX_ID 0x0A
+            #define DESCH_CAM_EXTERNAL_SYNC 1
             #define CAM_ALIAS 0x57
             #define CAM_LANES 4
             #include "../_des_ch_common_isx031.asl"
@@ -227,12 +257,16 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
             #undef DESCH_SER_PATH
             #undef DESCH_SER_REF
             #undef DESCH_SER_GPIOREF
-            #undef DESCH_SER_EXTRA_GPIO_PIN
-            #undef DESCH_CAM_FSIN_GPIO
+            #undef DESCH_SER_GPIO_RX_PIN
+            #undef DESCH_SER_GPIO_RX_ID
+            #undef DESCH_CAM_EXTERNAL_SYNC
             #undef CAM_ALIAS
             #undef CAM_LANES
 
             // ---- DES-level cleanup ----
+            #undef DES_FSYNC_FPS
+            #undef DES_FSYNC_TX_ID
+            #undef DES_FSYNC_LINK_MASK
             #undef DES_PHY_TYPE
             #undef DES_I2C_ADDR
             #undef DES_INTERNAL_PHY

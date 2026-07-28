@@ -13,6 +13,9 @@
 MAX96724 内部 FSYNC 发生器直接驱动 GMSL2 反向通道隧道，4 个加串器的 MFP7 同步复现脉冲，
 ISX031 在外部脉冲从模式下出帧，**四路快门相位差 0.012 ms**（基线 6.89 ms，改善约 570×）。
 
+关键前置条件（干净重启后才暴露出来）：必须置 **`FSYNC_23 (0x4B7) bit5 = FSYNC_RST_MODE`**，
+否则帧同步状态机要等 video lock，而从模式的 sensor 要等脉冲才出帧 —— 互锁死。详见 §2.4。
+
 上一版文档的核心结论"发生器没有向隧道发送任何信号"**是错的**，原因见 §3.1。
 
 ---
@@ -66,6 +69,51 @@ ISX031 在外部脉冲从模式下出帧，**四路快门相位差 0.012 ms**（
 
 `0x8C` = `GPIO_IN` 为高。四路占空比一致（约 75/25），与 30 fps 周期相符。
 
+### 2.4 干净重启后暴露的死锁：`FSYNC_RST_MODE`
+
+§2.1–2.3 的数据是在"之前手工写过寄存器"的那个 boot 里测的。**干净重启并加载新模块后，
+四路全部无法出流**：`v4l2-ctl --stream-mmap` 超时，dmesg 报
+`stream stop time out` / `stream close time out`；此时 `FSYNC_22 = 0x00`（未 locked），
+SER0 `0x2D3` 恒为 `0x8C`，**没有脉冲**。
+
+穷举 11 种配置（`FSYNC_0` = `0x10` / `0x14` / `0x34`，各自叠加"有/无解串器本地 MFP7 隧道 TX"，
+空闲与推流两种状态）全部无脉冲 —— 说明缺的不是 `FSYNC_MODE`，而是别的使能。
+
+手册 `FSYNC_23 (0x4B7)`：
+
+```
+BIT 5  FSYNC_RST_MODE    0x0: Legacy
+                         0x1: Start frame sync state machine regardless of video locks.
+```
+
+**这就是根因，而且是个典型的鸡生蛋死锁：**
+
+```
+ISX031 在外部脉冲从模式（0x8AF0=0x01）→ 收不到脉冲就不出帧
+      → 解串器拿不到视频 → 没有 video lock
+      → Legacy 模式下帧同步状态机不启动 → 不发脉冲  ┐
+      └──────────────────────────────────────────────┘  循环等待
+```
+
+也解释了为什么上一个 boot"能用"：那时旧模块没给 sensor 写 framesync 表，相机自由跑
+→ 有 video lock → 状态机已启动 → 才看得到脉冲。一旦 sensor 真的进了从模式，链路就起不来。
+
+验证（干净 boot，只手工置这一位，其余全交给驱动）：
+
+```
+0x4B7 = 0x00 → 写 0x20；0x4A0 = 0x10（EN_VS_GEN + MODE=00 + METH=manual）
+SER0 0x2D3 采样 40 次：0x8c 0x84 0x84 0x84 0x8c 0x84 ... ← 脉冲出现
+四路 30 次采样：i2c-7 high=5 / i2c-17 high=8 / i2c-20 high=10 / i2c-21 high=8
+v4l2-ctl -d /dev/video0 --stream-count=60 → 30.00 fps
+fsync_phase_check.py -n 60 → worst-case 0.012 ms，SYNCHRONISED
+4 路 compositor 管线（用户命令）→ 每路 150 帧正常 EOS，无 error
+```
+
+**并且这次完全没有写任何解串器本地 GPIO 隧道 TX 寄存器**，所以 §3.2 里
+"不需要本地 MFP 注入"的结论是成立的 —— 只是当时误以为唯一的开关是 `FSYNC_MODE`。
+
+驱动改动：`max96724_set_fsync()` 在启动发生器之前置 `FSYNC_23_FSYNC_RST_MODE`。
+
 ---
 
 ## 3. 上一轮结论为何是错的
@@ -99,6 +147,10 @@ METH=01 / METH=10，以及 0x40 / 0x50 / 0x54：只有 0x84   ← 无跳变
   或 `0b01`（GPIO 输出）**都可以**。
 - **不需要**把脉冲先注入解串器本地 MFP 再进隧道。上一版步骤 1 想验证的"本地 MFP 注入"
   路径不是必需的。
+
+> ⚠ 这个实验有一个隐含前提当时没意识到：那个 boot 里相机是自由运行的，**已经有 video lock**，
+> 所以状态机早就启动了，`FSYNC_METH != 00` 才是唯一剩下的变量。真正的第一道开关是
+> `FSYNC_RST_MODE`（§2.4）。上面三条结论本身仍然成立，但"只要 METH=00 就够"是不完整的。
 
 ### 3.3 仍然成立的发现：MAX96724 GPIO 寄存器地址不是均匀步进
 

@@ -170,6 +170,9 @@ static const u16 max96724_gpio_b_regs[MAX96724_NUM_LINKS][MAX96724_GPIO_NUM] = {
 #define MAX96724_FSYNC_22_FSYNC_LOCKED		BIT(6)
 #define MAX96724_FSYNC_22_LOSS_OF_LOCK		BIT(7)
 
+#define MAX96724_FSYNC_23			0x4b7
+#define MAX96724_FSYNC_23_FSYNC_RST_MODE	BIT(5)
+
 /* Frame sync generator time base when FS_USE_XTAL is set. */
 #define MAX96724_FSYNC_XTAL_RATE		25000000UL
 
@@ -1340,6 +1343,18 @@ static int max96724_set_fsync(struct max_des *des,
 		return ret;
 
 	ret = regmap_write(priv->regmap, MAX96724_FSYNC_7, (period >> 16) & 0xff);
+	if (ret)
+		return ret;
+
+	/*
+	 * In legacy reset mode the frame sync state machine only starts once the
+	 * links report locked video. Sensors driven in slave mode produce no
+	 * video until they receive a pulse, so the two would wait for each
+	 * other forever. Start the state machine independently of video lock.
+	 */
+	ret = regmap_update_bits(priv->regmap, MAX96724_FSYNC_23,
+				 MAX96724_FSYNC_23_FSYNC_RST_MODE,
+				 MAX96724_FSYNC_23_FSYNC_RST_MODE);
 	if (ret)
 		return ret;
 

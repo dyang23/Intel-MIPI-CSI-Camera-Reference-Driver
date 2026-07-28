@@ -174,7 +174,8 @@ done
 ### 1.B max96724 寄存器建模 √
 
 - [√] 1.5 [max96724.c](../drivers/media/i2c/maxim-serdes/max96724.c) 新增 FSYNC 寄存器宏:
-      `FSYNC_0(0x4A0)` / `FSYNC_1(0x4A1)` / `FSYNC_5..7(0x4A5..7)` / `FSYNC_15(0x4AF)` / `FSYNC_16(0x4B0)` / `FSYNC_17(0x4B1)` / `FSYNC_22(0x4B6)`
+      `FSYNC_0(0x4A0)` / `FSYNC_1(0x4A1)` / `FSYNC_5..7(0x4A5..7)` / `FSYNC_15(0x4AF)` / `FSYNC_16(0x4B0)` / `FSYNC_17(0x4B1)` / `FSYNC_22(0x4B6)` /
+      **`FSYNC_23(0x4B7)` 的 `FSYNC_RST_MODE`**(后补,见 R14)
 - [√] 1.6 GPIO 隧道寄存器宏 —— **⚠ 本行原写法 `0x300 + (x)*3` 是错的**,见
       [gmsl_fsync_status.md §3.3](gmsl_fsync_status.md)。实际地址不均匀(GPIO4/GPIO9 后各有 1 字节空洞),
       且 link1/2/3 各有独立的 `GPIO_B`/`GPIO_C` 块。已改为 `max96724_gpio_b_regs[4][11]` 查表,
@@ -184,7 +185,8 @@ done
 
 ### 1.C 生成器实现 √
 
-- [√] 1.8 实现 `max96724_set_fsync()`,写入顺序:TX_ID → FSYNC_15 → PER_DIV → 周期 L/M/H →(可选 gen_pin)→ 最后置 `EN_VS_GEN`
+- [√] 1.8 实现 `max96724_set_fsync()`,写入顺序:TX_ID → FSYNC_15 → PER_DIV → 周期 L/M/H →
+      **`FSYNC_RST_MODE`** →(可选 gen_pin)→ 最后置 `EN_VS_GEN`
 - [√] 1.9 `enable=false` 路径:清 `EN_VS_GEN`、`FSYNC_MODE` 回 `0b11`。
       **承载 GPIO 的 `GPIO_TX_EN` 有意不清** —— 发生器停了以后隧道上只是一个静态电平,无害;
       下次 enable 会幂等地重配,少一次 I²C 往返
@@ -351,7 +353,8 @@ done
 | R9 | FSYNC 脉冲极性 vs 原 `fsin-gpios` 的低有效声明是否一致 → 实测能稳定出帧,极性兼容 | 2.17 | [√] |
 | R11 | **MAX96724 GPIO 寄存器地址不是均匀步进**(GPIO4/GPIO9 后有空洞,link1-3 另有独立块);原宏 `0x300+x*3` 对 pin7 算出 GPIO6 的 `GPIO_C` | 1.6 | [√] 已改查表 |
 | R12 | **MAX9295A 的 `GPIO_C` bit6 是 RSVD,不是 `GPIO_RECEIVED`** —— 曾据此误判"发生器无输出"。正确观测点是 `GPIO_A(x)` bit3 | 调试方法 | [√] 已纠正 |
-| R13 | 新默认 `FSYNC_MODE=0b00`(纯隧道源)尚未用**驱动**跑过;0.012 ms 实测是在 `0b01` 下取得的。需重启后复测,异常则改回 `0b01` | 4.x | [ ] |
+| R13 | 新默认 `FSYNC_MODE=0b00`(纯隧道源)尚未用**驱动**跑过 → **已验证可用**:干净 boot 下 `FSYNC_0=0x10` 即出脉冲,四路 0.012 ms,无需本地 MFP 注入 | 4.x | [√] |
+| R14 | **`FSYNC_23 (0x4B7) bit5 FSYNC_RST_MODE` 必须置 1** —— Legacy 模式下帧同步状态机要等 video lock,而从模式 sensor 要等脉冲才出帧,两者互锁死,表现为全部相机 `stream stop time out`。已在 `max96724_set_fsync()` 里置位 | 1.B / 4.x | [√] 已修 |
 | R7 | 老驱动 `ipu6-drivers/.../max9x/` 保持不动,不做双份实现 | 全程 | [√] 未改动 |
 | R8 | 共享层加通用 `set_fsync` op,便于 max9296a 将来复用(上游可维护性) | 1.3 | [√] |
 

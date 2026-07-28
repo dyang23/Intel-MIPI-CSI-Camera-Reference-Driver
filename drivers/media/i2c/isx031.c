@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
+#include <linux/property.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
 #include <asm/unaligned.h>
@@ -117,6 +118,7 @@ struct isx031 {
 
 	u8 lanes;
 	bool streaming;	/* Streaming on/off */
+	bool external_sync;	/* Shutter driven by an external pulse */
 };
 
 static const s64 isx031_link_frequencies[] = {
@@ -505,8 +507,14 @@ static int isx031_initialize_module(struct isx031 *isx031)
 	if (ret)
 		return ret;
 
-	if (isx031->platform_data &&
-	    !isx031->platform_data->irq_pin_flags) {
+	/*
+	 * Switch to external pulse-based sync when the board declares that a
+	 * frame sync pulse reaches the sensor's FSIN input. The platform data
+	 * check is the legacy path and is only populated by the old ACPI
+	 * pdata bridge.
+	 */
+	if (isx031->external_sync ||
+	    (isx031->platform_data && !isx031->platform_data->irq_pin_flags)) {
 		ret = isx031_write_reg_list(client, &isx031_framesync_reg_list, false);
 		if (ret) {
 			dev_err(&client->dev, "Failed to set framesync\n");
@@ -1007,6 +1015,7 @@ static int isx031_probe(struct i2c_client *client)
 	struct v4l2_subdev *sd;
 	struct isx031 *isx031;
 	const struct isx031_reg_list *reg_list;
+	u32 val;
 	int ret;
 
 	isx031 = devm_kzalloc(&client->dev, sizeof(*isx031), GFP_KERNEL);
@@ -1017,6 +1026,11 @@ static int isx031_probe(struct i2c_client *client)
 	isx031->platform_data = client->dev.platform_data;
 	if (!isx031->platform_data)
 		dev_warn(&client->dev, "No platform data provided\n");
+
+	if (!device_property_read_u32(&client->dev, "sony,external-sync", &val))
+		isx031->external_sync = !!val;
+	if (isx031->external_sync)
+		dev_info(&client->dev, "External frame sync enabled\n");
 
 	/*
 	 * FSIN is a serializer pin that is electrically shared between the

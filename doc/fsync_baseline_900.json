@@ -1,0 +1,48 @@
+{
+  "devices": [
+    "/dev/video0",
+    "/dev/video1",
+    "/dev/video2",
+    "/dev/video3"
+  ],
+  "frames_compared": 885,
+  "frame_period_ms": 33.33277947718639,
+  "raw_spread_ms": {
+    "mean": 106.88841920903955,
+    "median": 106.889,
+    "min": 106.883,
+    "max": 106.894,
+    "stdev": 0.00237194038365739
+  },
+  "shutter_phase": {
+    "/dev/video0": {
+      "mean_ms": 0.0,
+      "stdev_ms": 0.0,
+      "whole_frames_offset": 0
+    },
+    "/dev/video1": {
+      "mean_ms": 2.073997923943551,
+      "stdev_ms": 0.003988550925724056,
+      "whole_frames_offset": 1
+    },
+    "/dev/video2": {
+      "mean_ms": 6.890080777480372,
+      "stdev_ms": 0.00237194038365739,
+      "whole_frames_offset": 3
+    },
+    "/dev/video3": {
+      "mean_ms": 4.597087373310832,
+      "stdev_ms": 0.011816675681786556,
+      "whole_frames_offset": 2
+    }
+  },
+  "shutter_phase_spread_ms": 6.890080777480372,
+  "per_device_fps": {
+    "/dev/video0": 30.000487215921414,
+    "/dev/video1": 30.0004972273734,
+    "/dev/video2": 30.000483211342495,
+    "/dev/video3": 30.000526260621946
+  },
+  "verdict": "NOT SYNCHRONISED",
+  "mean_fps": 30.000498478814812
+}

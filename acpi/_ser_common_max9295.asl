@@ -11,6 +11,8 @@
  *   DESCH_SER_I2C        - SER I2C slave address (e.g. 0x40, 0x62), used in I2cSerialBusV2
  *   CAM_ALIAS            - Camera alias I2C address used in i2c-alias-pool in _DSD
  *   DESCH_SER_EXTRA_GPIO_PIN - (Optional) SER Extra GPIO pin number, used in GpioIo
+ *   DESCH_SER_GPIO_RX_PIN - (Optional) SER MFP pin that reproduces a GMSL tunneled GPIO (e.g. 7 for MFP7)
+ *   DESCH_SER_GPIO_RX_ID  - (Optional, required with DESCH_SER_GPIO_RX_PIN) Tunnel channel id, must match the DES maxim,fsync-tx-id
  *   DESCH_SER_X/Y/Z/U_VC - (Optional) SER VC filter for Pipe X/Y/Z/U, specifically for MAX96717 driver
  */
 
@@ -87,6 +89,17 @@ Name (_DSD, Package ()          // _DSD: Device-Specific Data
          * Address called out in the pool is used as Camera Alias Address.
          */
         Package () { "i2c-alias-pool",  Package() { CAM_ALIAS } },
+
+        /*
+         * Reproduce a GMSL2 tunneled GPIO on a local MFP pin, used to bring
+         * the deserializer's frame sync pulse out to the sensor. The pin must
+         * not be listed in the GpioIo resource above, otherwise a gpiolib
+         * consumer would claim it and force it back to a host driven output.
+         */
+#ifdef DESCH_SER_GPIO_RX_PIN
+        Package () { "maxim,gpio-rx-pin", DESCH_SER_GPIO_RX_PIN },
+        Package () { "maxim,gpio-rx-id",  DESCH_SER_GPIO_RX_ID },
+#endif
     },
     ToUUID("dbb8e3e6-5886-4ba6-8795-1319f52a966b"), // Hierarchical Data Extension
     Package ()

@@ -87,6 +87,15 @@ Name (_DSD, Package ()          // _DSD: Device-Specific Data
 #ifdef DESCH_CAM_FSIN_GPIO
         Package () { "fsin-gpios", Package () { DESCH_SER_GPIOREF, 0, 1, 1 } },
 #endif
+        /*
+         * Put the sensor in external pulse-based sync mode, i.e. one frame per
+         * pulse received on FSIN, instead of letting it free-run on its own
+         * time base. Declare this only when the board actually delivers a
+         * frame sync pulse to that pin.
+         */
+#ifdef DESCH_CAM_EXTERNAL_SYNC
+        Package () { "sony,external-sync", 1 },
+#endif
     },
     ToUUID("dbb8e3e6-5886-4ba6-8795-1319f52a966b"), // Hierarchical Data Extension
     Package ()

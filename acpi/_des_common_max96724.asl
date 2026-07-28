@@ -9,6 +9,10 @@
  *   DES_I2C_ADDR           - DES I2C slave address (e.g. 0x0027 for MAX96724), used in I2cSerialBusV2
  *   DES_I2C_BUS            - DES I2C bus path string (e.g. "\\_SB.PC00.I2C1"), used in I2cSerialBusV2
  *   DES_PIPE_STR_AUTOSELECT - MAX96724 specific property
+ *   DES_FSYNC_FPS          - (Optional) Enables the internal frame sync generator at this rate
+ *   DES_FSYNC_TX_ID        - (Optional) GMSL GPIO tunnel channel id, must match the serializers' maxim,gpio-rx-id (default 0x1e)
+ *   DES_FSYNC_LINK_MASK    - (Optional) Bitmask of the links belonging to the frame sync group (default: all enabled links)
+ *   DES_FSYNC_GEN_PIN      - (Optional) Route the generator through a local MFP (0 or 7) instead of feeding the tunnel directly
  */
 
 Name (_UID, Zero)               // _UID: Unique ID
@@ -85,6 +89,32 @@ Name (_DSD, Package ()          // _DSD: Device-Specific Data
         #if DES_PIPE_STR_AUTOSELECT == 0
         Package () { "pipe-stream-autoselect", 0 }, // Zero to disable, One to enable
         #endif
+
+        /*
+         * Internal frame sync generator. Declaring maxim,fsync-fps turns the
+         * generator on while any link of this deserializer is streaming; the
+         * pulse is forwarded to the serializers over the GMSL reverse channel
+         * GPIO tunnel identified by maxim,fsync-tx-id, which each serializer
+         * reproduces on the pin wired to its sensor's frame sync input.
+         * Leaving these properties out keeps the generator off.
+         */
+#ifdef DES_FSYNC_FPS
+        Package () { "maxim,fsync-fps",       DES_FSYNC_FPS },
+#ifdef DES_FSYNC_TX_ID
+        Package () { "maxim,fsync-tx-id",     DES_FSYNC_TX_ID },
+#endif
+#ifdef DES_FSYNC_LINK_MASK
+        Package () { "maxim,fsync-link-mask", DES_FSYNC_LINK_MASK },
+#endif
+        /*
+         * Some boards need the pulse on one of the deserializer's own pins,
+         * either because it is wired on the board or because the generator
+         * only reaches the tunnel that way. Only MFP0 and MFP7 can carry it.
+         */
+#ifdef DES_FSYNC_GEN_PIN
+        Package () { "maxim,fsync-gen-pin",   DES_FSYNC_GEN_PIN },
+#endif
+#endif
     },
     ToUUID("dbb8e3e6-5886-4ba6-8795-1319f52a966b"), // Hierarchical Data Extension
     Package ()

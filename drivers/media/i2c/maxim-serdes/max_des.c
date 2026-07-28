@@ -2504,6 +2504,44 @@ static int max_des_update_active(struct max_des_priv *priv, u64 *streams_masks,
 	return 0;
 }
 
+/*
+ * The frame sync generator follows the CSI output: it is started once the
+ * first link starts streaming, and stopped only when the last one stops, so
+ * that adding a link does not glitch the pulse train of its siblings.
+ */
+static int max_des_update_fsync(struct max_des_priv *priv, u64 *streams_masks,
+				bool expected_active)
+{
+	struct max_des *des = priv->des;
+	bool active = false;
+	unsigned int i;
+	int ret;
+
+	if (!des->ops->set_fsync || !des->fsync.enabled)
+		return 0;
+
+	for (i = 0; i < des->ops->num_phys; i++) {
+		struct max_des_phy *phy = &des->phys[i];
+		u32 pad = max_des_phy_to_pad(des, phy);
+
+		if (streams_masks[pad]) {
+			active = true;
+			break;
+		}
+	}
+
+	if (active != expected_active || des->fsync_active == active)
+		return 0;
+
+	ret = des->ops->set_fsync(des, &des->fsync, active);
+	if (ret)
+		return ret;
+
+	des->fsync_active = active;
+
+	return 0;
+}
+
 static int max_des_update_links(struct max_des_priv *priv,
 				struct max_des_remap_context *context,
 				struct v4l2_subdev_state *state,
@@ -2610,9 +2648,13 @@ static int max_des_update_streams(struct v4l2_subdev *sd,
 			goto err_free_streams_masks;
 	}
 
-	ret = max_des_update_active(priv, streams_masks, false);
+	ret = max_des_update_fsync(priv, streams_masks, false);
 	if (ret)
 		goto err_revert_streams_disable;
+
+	ret = max_des_update_active(priv, streams_masks, false);
+	if (ret)
+		goto err_revert_fsync_disable;
 
 	ret = max_des_update_links(priv, &context, state, streams_masks);
 	if (ret)
@@ -2626,17 +2668,24 @@ static int max_des_update_streams(struct v4l2_subdev *sd,
 	if (ret)
 		goto err_revert_tpg_update;
 
+	ret = max_des_update_fsync(priv, streams_masks, true);
+	if (ret)
+		goto err_revert_active_enable;
+
 	if (enable) {
 		ret = max_des_enable_disable_streams(priv, state, pad,
 						     updated_streams_mask, enable);
 		if (ret)
-			goto err_revert_active_enable;
+			goto err_revert_fsync_enable;
 	}
 
 	devm_kfree(priv->dev, priv->streams_masks);
 	priv->streams_masks = streams_masks;
 
 	return 0;
+
+err_revert_fsync_enable:
+	max_des_update_fsync(priv, priv->streams_masks, false);
 
 err_revert_active_enable:
 	max_des_update_active(priv, priv->streams_masks, false);
@@ -2649,6 +2698,9 @@ err_revert_links_update:
 
 err_revert_active_disable:
 	max_des_update_active(priv, priv->streams_masks, true);
+
+err_revert_fsync_disable:
+	max_des_update_fsync(priv, priv->streams_masks, true);
 
 err_revert_streams_disable:
 	if (!enable)
@@ -3227,6 +3279,75 @@ static int max_des_find_phys_config(struct max_des_priv *priv)
 	return 0;
 }
 
+/*
+ * Frame sync group declaration. Boards that want their cameras to expose a
+ * common shutter describe the generator here; leaving the properties out
+ * keeps the generator off, which is the behavior of a plain capture setup.
+ */
+static int max_des_parse_fsync_dt(struct max_des_priv *priv,
+				  struct fwnode_handle *fwnode)
+{
+	struct max_des *des = priv->des;
+	struct max_des_fsync *fsync = &des->fsync;
+	u32 val;
+	int ret;
+
+	if (!fwnode_property_present(fwnode, "maxim,fsync-fps"))
+		return 0;
+
+	if (!des->ops->set_fsync) {
+		dev_err(priv->dev, "Frame sync is not supported by this chip\n");
+		return -EOPNOTSUPP;
+	}
+
+	ret = fwnode_property_read_u32(fwnode, "maxim,fsync-fps", &fsync->fps);
+	if (ret)
+		return ret;
+
+	if (!fsync->fps) {
+		dev_err(priv->dev, "Invalid frame sync rate\n");
+		return -EINVAL;
+	}
+
+	fsync->tx_id = MAX_DES_FSYNC_DEFAULT_TX_ID;
+	if (!fwnode_property_read_u32(fwnode, "maxim,fsync-tx-id", &val))
+		fsync->tx_id = val;
+
+	if (fsync->tx_id > MAX_DES_FSYNC_MAX_TX_ID) {
+		dev_err(priv->dev, "Invalid frame sync tunnel id %u\n",
+			fsync->tx_id);
+		return -EINVAL;
+	}
+
+	/* An unset mask lets the chip pick every enabled link. */
+	if (!fwnode_property_read_u32(fwnode, "maxim,fsync-link-mask", &val)) {
+		if (val & ~GENMASK(des->ops->num_links - 1, 0)) {
+			dev_err(priv->dev, "Invalid frame sync link mask 0x%x\n",
+				val);
+			return -EINVAL;
+		}
+
+		fsync->link_mask = val;
+	}
+
+	fsync->use_xtal = true;
+	if (!fwnode_property_read_u32(fwnode, "maxim,fsync-use-xtal", &val))
+		fsync->use_xtal = !!val;
+
+	/*
+	 * Boards that need the pulse to leave through one of the
+	 * deserializer's pins name it here. The pin is then also configured as
+	 * a transmitter on the tunnel, so the serializers still see it.
+	 */
+	fsync->gen_pin = MAX_DES_FSYNC_NO_GEN_PIN;
+	if (!fwnode_property_read_u32(fwnode, "maxim,fsync-gen-pin", &val))
+		fsync->gen_pin = val;
+
+	fsync->enabled = true;
+
+	return 0;
+}
+
 static int max_des_parse_dt(struct max_des_priv *priv)
 {
 	struct fwnode_handle *fwnode = dev_fwnode(priv->dev);
@@ -3240,6 +3361,10 @@ static int max_des_parse_dt(struct max_des_priv *priv)
 
 	if (!fwnode_property_read_u32(fwnode, "pipe-stream-autoselect", &val))
 		des->pipe_stream_autoselect = !!val;
+
+	ret = max_des_parse_fsync_dt(priv, fwnode);
+	if (ret)
+		return ret;
 
 	for (i = 0; i < des->ops->num_phys; i++) {
 		phy = &des->phys[i];

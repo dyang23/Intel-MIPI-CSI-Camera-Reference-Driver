@@ -66,6 +66,32 @@ struct max_des_phy {
 	bool enabled;
 };
 
+/*
+ * Internal frame sync generator configuration.
+ *
+ * The deserializer generates a periodic pulse and forwards it to the
+ * serializers over the GMSL reverse channel GPIO tunnel, where it is
+ * reproduced on a pin wired to the sensor's frame sync input.
+ */
+#define MAX_DES_FSYNC_MAX_TX_ID		0x1f
+#define MAX_DES_FSYNC_DEFAULT_TX_ID	0x1e
+
+#define MAX_DES_FSYNC_NO_GEN_PIN	(-1)
+
+struct max_des_fsync {
+	bool enabled;
+	unsigned int fps;
+	bool use_xtal;
+	unsigned int tx_id;
+	unsigned int link_mask;
+	/*
+	 * The generator can feed the tunnel directly, or drive one of the
+	 * deserializer's own pins which is then configured as a tunnel
+	 * transmitter. MAX_DES_FSYNC_NO_GEN_PIN selects the direct path.
+	 */
+	int gen_pin;
+};
+
 struct max_des;
 
 struct max_des_ops {
@@ -126,6 +152,8 @@ struct max_des_ops {
 	int (*select_links)(struct max_des *des, unsigned int mask);
 	int (*set_link_version)(struct max_des *des, struct max_des_link *link,
 				enum max_serdes_gmsl_version version);
+	int (*set_fsync)(struct max_des *des, const struct max_des_fsync *cfg,
+			 bool enable);
 };
 
 struct max_des_priv;
@@ -140,6 +168,9 @@ struct max_des {
 	struct max_des_link *links;
 	const struct max_serdes_tpg_entry *tpg_entry;
 	enum max_serdes_tpg_pattern tpg_pattern;
+
+	struct max_des_fsync fsync;
+	bool fsync_active;
 
 	unsigned int phys_config;
 	enum max_serdes_gmsl_mode mode;

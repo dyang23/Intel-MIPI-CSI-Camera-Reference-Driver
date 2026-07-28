@@ -65,7 +65,7 @@ This nested structure (Serializer with internal channels) may not be correctly p
 - `_cam_common_s36.asl` line 31: PhyType = 1 (DPHY) ✓ correct
 
 ### Check Preprocessed .i File
-- `acpi/NDK_unitree_max96724_s36_scan_all_links.i` line ~275:
+- `acpi/ndk_unitree_max96724_mipi0_s36_scan_all_links.i` line ~275:
   ```
   CSI2Bus(
       DeviceInitiated,        // SlaveMode

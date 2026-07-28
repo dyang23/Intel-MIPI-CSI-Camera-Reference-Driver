@@ -35,7 +35,7 @@ Serializer 侧的 I²C 通信地址统一是 `0x40`（远端），MAX96724 会�
 
 ## 文件说明
 
-### 1. `nodka_unitree_max96724_mixed_sensing_s36_shw3h.asl` — 生产配置（已验证工作）
+### 1. `ndk_unitree_max96724_mipi0_mixed_s36_shw3h.asl` — 生产配置（已验证工作）
 
 **Camera 拓扑：**
 
@@ -85,7 +85,7 @@ Link 0 (port A) ─────┤ CH00 → SER0 (MAX9295D)     ├──→ PHY
 
 ---
 
-### 3. `NDK_unitree_max96724_s36_scan_all_links.asl` — 全 Link 诊断（一次性）
+### 3. `ndk_unitree_max96724_mipi0_s36_scan_all_links.asl` — 全 Link 诊断（一次性）
 
 **Camera 拓扑：**
 
@@ -108,11 +108,11 @@ Link 3 (port D) ─────┤ CH03 → SER3 @0x40 ─ S36        │
 - 有 S36 实体存在的那条 Link，`max9295d` serializer 和 ISX031 sensor 都会 probe 成功
 - 其他没插 S36 的 Link，probe 会失败——**这是预期行为**，正是用来定位 S36 位置的信号
 
-**用完就切回：** 确定 Link 编号后，改回 `NDK_unitree_max96724_s36_3H.asl` 并把 `DESCH_LINK_NUM` 设成实测值（或用生产文件 `nodka_unitree_max96724_mixed_sensing_s36_shw3h.asl`）。不要用 scan 文件跑正式流量。
+**用完就切回：** 确定 Link 编号后，改回 `NDK_unitree_max96724_s36_3H.asl` 并把 `DESCH_LINK_NUM` 设成实测值（或用生产文件 `ndk_unitree_max96724_mipi0_mixed_s36_shw3h.asl`）。不要用 scan 文件跑正式流量。
 
 ---
 
-### 4. `NDK_unitree_max96724_d457.asl` — D457 单口（已验证工作）
+### 4. `ndk_unitree_max96724_mipi0_d457.asl` — D457 单口（已验证工作）
 
 **Camera 拓扑：**
 
@@ -131,7 +131,7 @@ Link 0 (port A) ─────┤ CH00 → SER0 (MAX9295A)     ├──→ PHY
 
 ---
 
-### 5. `NDK_unitree_max96724_d457_d405.asl` — D457 + D405 双口
+### 5. `ndk_unitree_max96724_mipi0_d457_d405.asl` — D457 + D405 双口
 
 **Camera 拓扑：**
 
@@ -153,7 +153,7 @@ Link 1 (port B) ─────┤ CH01 → SER1 (MAX9295A)     │            �
 
 ---
 
-### 6. `NDK_unitree_max96724_d457_d457_ac.asl` — 双 D457（port A + port C）
+### 6. `ndk_unitree_max96724_mipi0_2x_d457_ac.asl` — 双 D457（port A + port C）
 
 **Camera 拓扑：**
 
@@ -181,7 +181,7 @@ Link 2 (port C) ─────┤ CH02 → SER2 (MAX9295A)     │       MIPI p
   `No free VC ID ... skipping remap` 收不到图。** 同时用两台时，每台只开 depth+rgb。
 - **alias：** SER 侧由 `DESCH_LINK_NUM` 自动分配（Link 0→0x44，Link 2→0x46）；camera alias 手动分 0x54 / 0x56。
 - **port C 假设：** 若实测 D457 不在 port C（Link 2），把该整段的 `DESCH_LINK_NUM / CH0x / SER x / *_PATH`
-  改成实际 Link 号即可（可先用 `NDK_unitree_max96724_s36_scan_all_links.asl` 思路确认接头对应的 Link）。
+  改成实际 Link 号即可（可先用 `ndk_unitree_max96724_mipi0_s36_scan_all_links.asl` 思路确认接头对应的 Link）。
 
 ---
 

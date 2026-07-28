@@ -7,9 +7,9 @@
  * and Link 2 (port C) only, behind one MAX96724 whose output is on MIPI0.
  *
  * Purpose: variable-isolation test. The 4x ISX031 config
- * (NDK_unitree_max96724_4x_li_isx031_mipi0.asl) brings up Links 0/1/3 but
+ * (ndk_unitree_max96724_mipi0_4x_li_isx031.asl) brings up Links 0/1/3 but
  * fails Link 2's sensor probe (module ID read = 0x0fff). Yet the verified
- * NDK_unitree_max96724_d457_d457_ac.asl brings up D457 on this SAME Link 2
+ * ndk_unitree_max96724_mipi0_2x_d457_ac.asl brings up D457 on this SAME Link 2
  * with the SAME aliases (SER2=0x46, CAM2=0x56). This file mirrors that exact
  * 2-link (0 + 2) structure but with ISX031, to answer:
  *   - Link 2 works here (2 links)  -> the trigger is "all 4 links active"

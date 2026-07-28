@@ -25,7 +25,7 @@
  *   - Each MAX9295A exposes an extra GPIO (MFP7) and each ISX031 gets an
  *     fsin-gpios resource for frame-sync. See acpi/max96724_sensing_isx031.asl
  *     for the single-link Sensing reference this file fans out to four links,
- *     and acpi/nodka_unitree/NDK_unitree_max96724_4x_li_isx031_mipi1.asl for
+ *     and acpi/nodka_unitree/ndk_unitree_max96724_mipi1_4x_li_isx031.asl for
  *     the LI 4x-on-mipi1 counterpart.
  *
  * Board / hardware configuration:

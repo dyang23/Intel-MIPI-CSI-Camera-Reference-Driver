@@ -136,7 +136,7 @@ v4l2-ctl --list-devices
    - S36 on Link 0 (Port A)
    - Board-specific settings (I2C, MIPI port, PHY type)
 
-2. **NDK_unitree_max96724_s36_scan_all_links.asl**
+2. **ndk_unitree_max96724_mipi0_s36_scan_all_links.asl**
    - Debug config enabling all 4 GMSL links
    - Use to identify which ports have cameras
 

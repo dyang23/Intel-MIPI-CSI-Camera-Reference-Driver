@@ -9,8 +9,8 @@
  * intentionally NOT declared here — the goal is to bring D405 up on its own,
  * learn its real properties (native resolution, pixel formats, which of
  * depth/rgb/ir/imu actually produce data), before attempting to run both
- * cameras together on the shared output PHY0. Use NDK_unitree_max96724_d457.asl
- * for D457-only, and NDK_unitree_max96724_d457_d405.asl once both are understood.
+ * cameras together on the shared output PHY0. Use ndk_unitree_max96724_mipi0_d457.asl
+ * for D457-only, and ndk_unitree_max96724_mipi0_d457_d405.asl once both are understood.
  *
  * Board / hardware configuration (identical DES config to the other unitree files):
  *   - Platform IPU MIPI input port  : MIPI port 0   -> DES_TO_MIPI_PORT = 0

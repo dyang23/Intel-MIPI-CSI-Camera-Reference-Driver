@@ -17,7 +17,7 @@
  *     `i2cget -y 1 0x27` (deserializer ACKs on i2c-1; i2c-2 has no device).
  *
  * The D405 itself is declared identically to the unitree reference
- * acpi/nodka_unitree/NDK_unitree_max96724_d405.asl — the only deltas are the
+ * acpi/nodka_unitree/ndk_unitree_max96724_mipi0_d405.asl — the only deltas are the
  * board-level DES_TO_MIPI_PORT (0 -> 2) and DES_I2C_BUS (I2C0 -> I2C1).
  *
  * Camera topology:

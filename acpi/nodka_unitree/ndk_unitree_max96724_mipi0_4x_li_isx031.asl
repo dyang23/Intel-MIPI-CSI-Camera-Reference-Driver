@@ -6,7 +6,7 @@
  * 4x Leopard Imaging (LI) ISX031 GMSL cameras behind one MAX96724
  * deserializer, whose CSI-2 output is wired to the SoC MIPI0 port.
  *
- * This is the mipi0 sibling of NDK_unitree_max96724_4x_li_isx031_mipi1.asl.
+ * This is the mipi0 sibling of ndk_unitree_max96724_mipi1_4x_li_isx031.asl.
  * mipi0 is the fully-verified output path on this board (all other unitree
  * files use it): DES internal PHY0 ("cphy A") -> IPU MIPI port 0, DES on I2C0.
  *
@@ -83,7 +83,7 @@ DefinitionBlock ("", "SSDT", 2, "", "IMG_IPU", 0x20260513)
             #define DES_REF               \_SB.PC00.DES0
             /*
              * Disable MAX96724 pipe-stream-autoselect (match the verified-working
-             * NDK_unitree_max96724_d457_d457_ac.asl, which is the only config
+             * ndk_unitree_max96724_mipi0_2x_d457_ac.asl, which is the only config
              * proven to bring up Link 2 / port C). With autoselect ENABLED (the
              * driver default when this property is absent) Link 2's ISX031 fails
              * sensor probe (module ID read = 0x0fff) while Links 0/1/3 come up;

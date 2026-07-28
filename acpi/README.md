@@ -44,7 +44,7 @@ This will:
   - 3H placeholder (not yet enabled)
 
 ### Debug Configuration
-- **`NDK_unitree_max96724_s36_scan_all_links.asl`** - Diagnostic config
+- **`ndk_unitree_max96724_mipi0_s36_scan_all_links.asl`** - Diagnostic config
   - Enables all 4 GMSL links simultaneously
   - Used to identify which physical port cameras are connected to
   - Helps determine the correct link assignment

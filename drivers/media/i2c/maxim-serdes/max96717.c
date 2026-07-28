@@ -1739,6 +1739,57 @@ static int max96717_gpiochip_probe(struct max96717_priv *priv)
 	return devm_gpiochip_add_data(dev, &priv->gc, priv);
 }
 
+/*
+ * Reproduce a GMSL2 tunneled GPIO on a local pin.
+ *
+ * Boards that route the deserializer's frame sync pulse to the sensor over
+ * the reverse channel declare the receiving pin and the tunnel channel id
+ * here. The pinctrl custom parameters cannot be used for this, because the
+ * pinctrl core only builds its mappings from device tree, while this platform
+ * describes the serializer through ACPI.
+ */
+static int max96717_parse_gpio_rx(struct max96717_priv *priv)
+{
+	struct device *dev = priv->dev;
+	u32 pin, rx_id;
+	int ret;
+
+	if (device_property_read_u32(dev, "maxim,gpio-rx-pin", &pin))
+		return 0;
+
+	ret = device_property_read_u32(dev, "maxim,gpio-rx-id", &rx_id);
+	if (ret) {
+		dev_err(dev, "maxim,gpio-rx-pin without maxim,gpio-rx-id\n");
+		return ret;
+	}
+
+	if (pin >= MAX96717_GPIO_NUM ||
+	    rx_id > MAX96717_GPIO_C_GPIO_RX_ID) {
+		dev_err(dev, "Invalid gpio-rx pin %u id %u\n", pin, rx_id);
+		return -EINVAL;
+	}
+
+	/* Must match the deserializer's FSYNC_TX_ID. */
+	ret = regmap_update_bits(priv->regmap, MAX96717_GPIO_C(pin),
+				 MAX96717_GPIO_C_GPIO_RX_ID,
+				 FIELD_PREP(MAX96717_GPIO_C_GPIO_RX_ID, rx_id));
+	if (ret)
+		return ret;
+
+	/* Push-pull, so that the pin can drive the sensor's sync input. */
+	ret = regmap_update_bits(priv->regmap, MAX96717_GPIO_B(pin),
+				 MAX96717_GPIO_B_OUT_TYPE,
+				 MAX96717_GPIO_B_OUT_TYPE);
+	if (ret)
+		return ret;
+
+	return regmap_update_bits(priv->regmap, MAX96717_GPIO_A(pin),
+				  MAX96717_GPIO_A_GPIO_RX_EN |
+				  MAX96717_GPIO_A_GPIO_TX_EN |
+				  MAX96717_GPIO_A_GPIO_OUT_DIS,
+				  MAX96717_GPIO_A_GPIO_RX_EN);
+}
+
 static int max96717_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -1793,6 +1844,10 @@ static int max96717_probe(struct i2c_client *client)
 		return ret;
 
 	ret = max96717_gpiochip_probe(priv);
+	if (ret)
+		return ret;
+
+	ret = max96717_parse_gpio_rx(priv);
 	if (ret)
 		return ret;
 

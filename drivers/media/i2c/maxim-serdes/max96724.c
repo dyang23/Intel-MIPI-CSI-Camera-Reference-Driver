@@ -84,6 +84,95 @@
 #define MAX96724_BACKTOP32_BPP10DBL1		BIT(6)
 #define MAX96724_BACKTOP32_BPP10DBL1_MODE	BIT(7)
 
+/*
+ * Multi-function pin registers.
+ *
+ * GPIO_A holds the pin direction and is shared by every link, GPIO_B and
+ * GPIO_C hold the tunnel channel ids. Only link 0 keeps all three adjacent;
+ * links 1 to 3 have their own GPIO_B/GPIO_C blocks elsewhere, with the
+ * transmit and receive enables folded into the spare bits.
+ *
+ * None of the blocks is evenly strided: the per-pin registers are packed into
+ * 16 byte pages, which leaves a hole every time a page runs out. Computing the
+ * address as a plain multiple of the pin number lands on a neighbouring pin's
+ * registers, so the addresses are tabulated instead.
+ */
+#define MAX96724_NUM_LINKS			4
+#define MAX96724_GPIO_NUM			11
+
+static const u16 max96724_gpio_b_regs[MAX96724_NUM_LINKS][MAX96724_GPIO_NUM] = {
+	{ 0x301, 0x304, 0x307, 0x30a, 0x30d, 0x311, 0x314, 0x317, 0x31a, 0x31d, 0x321 },
+	{ 0x337, 0x33a, 0x33d, 0x341, 0x344, 0x347, 0x34a, 0x34d, 0x351, 0x354, 0x357 },
+	{ 0x36d, 0x371, 0x374, 0x377, 0x37a, 0x37d, 0x381, 0x384, 0x387, 0x38a, 0x38d },
+	{ 0x3a4, 0x3a7, 0x3aa, 0x3ad, 0x3b1, 0x3b4, 0x3b7, 0x3ba, 0x3bd, 0x3c1, 0x3c4 },
+};
+
+#define MAX96724_GPIO_A(pin)			(max96724_gpio_b_regs[0][pin] - 1)
+#define MAX96724_GPIO_A_GPIO_OUT_DIS		BIT(0)
+#define MAX96724_GPIO_A_GPIO_TX_EN		BIT(1)
+#define MAX96724_GPIO_A_GPIO_RX_EN		BIT(2)
+#define MAX96724_GPIO_A_GPIO_IN			BIT(3)
+#define MAX96724_GPIO_A_GPIO_OUT		BIT(4)
+#define MAX96724_GPIO_A_TX_COMP_EN		BIT(5)
+#define MAX96724_GPIO_A_RES_CFG			BIT(7)
+
+#define MAX96724_GPIO_B(link, pin)		(max96724_gpio_b_regs[link][pin])
+#define MAX96724_GPIO_B_GPIO_TX_ID		GENMASK(4, 0)
+/* Link 0 drives the pin, so it carries the output type instead of an enable. */
+#define MAX96724_GPIO_B_OUT_TYPE		BIT(5)
+#define MAX96724_GPIO_B_GPIO_TX_EN		BIT(5)
+#define MAX96724_GPIO_B_TX_COMP_EN		BIT(6)
+
+#define MAX96724_GPIO_C(link, pin)		(max96724_gpio_b_regs[link][pin] + 1)
+#define MAX96724_GPIO_C_GPIO_RX_ID		GENMASK(4, 0)
+#define MAX96724_GPIO_C_GPIO_RX_EN		BIT(5)
+#define MAX96724_GPIO_C_GPIO_RECEIVED		BIT(6)
+
+#define MAX96724_FSYNC_0			0x4a0
+#define MAX96724_FSYNC_0_FSYNC_METH		GENMASK(1, 0)
+#define MAX96724_FSYNC_0_FSYNC_METH_MANUAL	0b00
+#define MAX96724_FSYNC_0_FSYNC_METH_SEMI_AUTO	0b01
+#define MAX96724_FSYNC_0_FSYNC_METH_AUTO	0b10
+#define MAX96724_FSYNC_0_FSYNC_MODE		GENMASK(3, 2)
+/* Generation is on and no pin is involved: the tunnel is the only consumer. */
+#define MAX96724_FSYNC_0_FSYNC_MODE_TUNNEL	0b00
+#define MAX96724_FSYNC_0_FSYNC_MODE_GPIO_OUT	0b01
+#define MAX96724_FSYNC_0_FSYNC_MODE_OFF		0b11
+#define MAX96724_FSYNC_0_EN_VS_GEN		BIT(4)
+/* Only MFP0 and MFP7 can carry the pulse out of the chip. */
+#define MAX96724_FSYNC_0_FSYNC_OUT_PIN		BIT(5)
+#define MAX96724_FSYNC_GEN_PIN_MFP0		0
+#define MAX96724_FSYNC_GEN_PIN_MFP7		7
+
+#define MAX96724_FSYNC_1			0x4a1
+#define MAX96724_FSYNC_1_FSYNC_PER_DIV		GENMASK(3, 0)
+
+/* 24-bit frame sync period, LSB first. */
+#define MAX96724_FSYNC_5			0x4a5
+#define MAX96724_FSYNC_6			0x4a6
+#define MAX96724_FSYNC_7			0x4a7
+#define MAX96724_FSYNC_PERIOD_MAX		GENMASK(23, 0)
+
+#define MAX96724_FSYNC_15			0x4af
+#define MAX96724_FSYNC_15_FS_LINKS		GENMASK(3, 0)
+#define MAX96724_FSYNC_15_AUTO_FS_LINKS		BIT(4)
+#define MAX96724_FSYNC_15_FS_USE_XTAL		BIT(6)
+#define MAX96724_FSYNC_15_FS_GPIO_TYPE		BIT(7)
+
+#define MAX96724_FSYNC_16			0x4b0
+#define MAX96724_FSYNC_16_FSYNC_ERR_CNT		GENMASK(7, 0)
+
+#define MAX96724_FSYNC_17			0x4b1
+#define MAX96724_FSYNC_17_FSYNC_ERR_THR		GENMASK(2, 0)
+#define MAX96724_FSYNC_17_FSYNC_TX_ID		GENMASK(7, 3)
+
+#define MAX96724_FSYNC_22			0x4b6
+#define MAX96724_FSYNC_22_FSYNC_LOCKED		BIT(6)
+#define MAX96724_FSYNC_22_LOSS_OF_LOCK		BIT(7)
+
+/* Frame sync generator time base when FS_USE_XTAL is set. */
+#define MAX96724_FSYNC_XTAL_RATE		25000000UL
+
 #define MAX96724_MIPI_PHY0			0x8a0
 #define MAX96724_MIPI_PHY0_PHY_CONFIG		GENMASK(4, 0)
 #define MAX96724_MIPI_PHY0_PHY_4X2		BIT(0)
@@ -1083,6 +1172,245 @@ static int max96724_set_tpg(struct max_des *des,
 				  MAX96724_MIPI_PHY0_FORCE_CSI_OUT_EN, !!entry);
 }
 
+static int max96724_fsync_period(struct max96724_priv *priv,
+				 const struct max_des_fsync *cfg,
+				 unsigned int *period)
+{
+	unsigned long rate;
+	u64 val;
+
+	/*
+	 * The generator either counts the 25MHz crystal, or the pixel clock
+	 * of the master link's video pipe. Only the crystal has a rate the
+	 * driver knows about, so a manual period can only be derived from it.
+	 */
+	if (!cfg->use_xtal) {
+		dev_err(priv->dev,
+			"fsync period requires the crystal time base\n");
+		return -EINVAL;
+	}
+
+	if (!cfg->fps)
+		return -EINVAL;
+
+	rate = MAX96724_FSYNC_XTAL_RATE;
+	val = DIV_ROUND_CLOSEST(rate, cfg->fps);
+	if (!val || val > MAX96724_FSYNC_PERIOD_MAX) {
+		dev_err(priv->dev, "unsupported fsync rate %ufps\n", cfg->fps);
+		return -EINVAL;
+	}
+
+	*period = val;
+
+	return 0;
+}
+
+/*
+ * Route the generator through one of the deserializer's own pins.
+ *
+ * The pin is driven by the generator and, on every link of the frame sync
+ * group, also announced as a transmitter on the tunnel channel, so the
+ * serializers keep receiving the pulse. Boards that do not need the pulse
+ * outside the chip leave this out and let the generator feed the tunnel
+ * directly.
+ */
+static int max96724_set_fsync_gen_pin(struct max96724_priv *priv,
+				      const struct max_des_fsync *cfg,
+				      unsigned int link_mask)
+{
+	unsigned int pin = cfg->gen_pin;
+	unsigned int link;
+	int ret;
+
+	/* Push-pull, so the pin can drive a sync input on the board. */
+	ret = regmap_update_bits(priv->regmap, MAX96724_GPIO_B(0, pin),
+				 MAX96724_GPIO_B_GPIO_TX_ID |
+				 MAX96724_GPIO_B_OUT_TYPE,
+				 MAX96724_GPIO_B_OUT_TYPE |
+				 FIELD_PREP(MAX96724_GPIO_B_GPIO_TX_ID,
+					    cfg->tx_id));
+	if (ret)
+		return ret;
+
+	for (link = 1; link < MAX96724_NUM_LINKS; link++) {
+		if (!(link_mask & BIT(link)))
+			continue;
+
+		ret = regmap_update_bits(priv->regmap,
+					 MAX96724_GPIO_B(link, pin),
+					 MAX96724_GPIO_B_GPIO_TX_ID |
+					 MAX96724_GPIO_B_GPIO_TX_EN,
+					 MAX96724_GPIO_B_GPIO_TX_EN |
+					 FIELD_PREP(MAX96724_GPIO_B_GPIO_TX_ID,
+						    cfg->tx_id));
+		if (ret)
+			return ret;
+	}
+
+	return regmap_update_bits(priv->regmap, MAX96724_GPIO_A(pin),
+				  MAX96724_GPIO_A_GPIO_OUT_DIS |
+				  MAX96724_GPIO_A_GPIO_TX_EN |
+				  MAX96724_GPIO_A_GPIO_RX_EN,
+				  MAX96724_GPIO_A_GPIO_TX_EN);
+}
+
+static int max96724_set_fsync(struct max_des *des,
+			      const struct max_des_fsync *cfg, bool enable)
+{
+	struct max96724_priv *priv = des_to_priv(des);
+	unsigned int period, val, mode, link_mask;
+	int ret;
+
+	if (cfg->tx_id > MAX96724_FSYNC_17_FSYNC_TX_ID >> 3 ||
+	    cfg->link_mask & ~MAX96724_FSYNC_15_FS_LINKS)
+		return -EINVAL;
+
+	if (cfg->gen_pin != MAX_DES_FSYNC_NO_GEN_PIN &&
+	    cfg->gen_pin != MAX96724_FSYNC_GEN_PIN_MFP0 &&
+	    cfg->gen_pin != MAX96724_FSYNC_GEN_PIN_MFP7) {
+		dev_err(priv->dev,
+			"frame sync can only leave through MFP0 or MFP7\n");
+		return -EINVAL;
+	}
+
+	if (!enable) {
+		/*
+		 * Stop the generator, so that no truncated pulse is forwarded
+		 * to the serializers.
+		 */
+		return regmap_update_bits(priv->regmap, MAX96724_FSYNC_0,
+					  MAX96724_FSYNC_0_EN_VS_GEN |
+					  MAX96724_FSYNC_0_FSYNC_MODE,
+					  FIELD_PREP(MAX96724_FSYNC_0_FSYNC_MODE,
+						     MAX96724_FSYNC_0_FSYNC_MODE_OFF));
+	}
+
+	ret = max96724_fsync_period(priv, cfg, &period);
+	if (ret)
+		return ret;
+
+	/*
+	 * Tunnel channel ID, must match the serializers' GPIO_RX_ID. The
+	 * generator is a tunnel source of its own, no local pin has to be
+	 * enabled for transmission. Enabling one with the same ID would put a
+	 * second source on the channel and corrupt the pulse train.
+	 */
+	ret = regmap_update_bits(priv->regmap, MAX96724_FSYNC_17,
+				 MAX96724_FSYNC_17_FSYNC_TX_ID,
+				 FIELD_PREP(MAX96724_FSYNC_17_FSYNC_TX_ID,
+					    cfg->tx_id));
+	if (ret)
+		return ret;
+
+	/*
+	 * An empty link mask selects every enabled link, otherwise only the
+	 * links belonging to the frame sync group are driven.
+	 */
+	link_mask = cfg->link_mask;
+	val = MAX96724_FSYNC_15_FS_GPIO_TYPE;
+	if (cfg->use_xtal)
+		val |= MAX96724_FSYNC_15_FS_USE_XTAL;
+	if (link_mask) {
+		val |= FIELD_PREP(MAX96724_FSYNC_15_FS_LINKS, link_mask);
+	} else {
+		val |= MAX96724_FSYNC_15_AUTO_FS_LINKS;
+		link_mask = MAX96724_FSYNC_15_FS_LINKS;
+	}
+
+	ret = regmap_update_bits(priv->regmap, MAX96724_FSYNC_15,
+				 MAX96724_FSYNC_15_FS_GPIO_TYPE |
+				 MAX96724_FSYNC_15_FS_USE_XTAL |
+				 MAX96724_FSYNC_15_AUTO_FS_LINKS |
+				 MAX96724_FSYNC_15_FS_LINKS, val);
+	if (ret)
+		return ret;
+
+	/* One pulse per frame. */
+	ret = regmap_update_bits(priv->regmap, MAX96724_FSYNC_1,
+				 MAX96724_FSYNC_1_FSYNC_PER_DIV, 0);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(priv->regmap, MAX96724_FSYNC_5, period & 0xff);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(priv->regmap, MAX96724_FSYNC_6, (period >> 8) & 0xff);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(priv->regmap, MAX96724_FSYNC_7, (period >> 16) & 0xff);
+	if (ret)
+		return ret;
+
+	val = MAX96724_FSYNC_0_EN_VS_GEN;
+	mode = MAX96724_FSYNC_0_FSYNC_MODE_TUNNEL;
+
+	if (cfg->gen_pin != MAX_DES_FSYNC_NO_GEN_PIN) {
+		ret = max96724_set_fsync_gen_pin(priv, cfg, link_mask);
+		if (ret)
+			return ret;
+
+		mode = MAX96724_FSYNC_0_FSYNC_MODE_GPIO_OUT;
+		if (cfg->gen_pin == MAX96724_FSYNC_GEN_PIN_MFP7)
+			val |= MAX96724_FSYNC_0_FSYNC_OUT_PIN;
+	}
+
+	/* Start the generator last, once its whole configuration is live. */
+	return regmap_update_bits(priv->regmap, MAX96724_FSYNC_0,
+				  MAX96724_FSYNC_0_EN_VS_GEN |
+				  MAX96724_FSYNC_0_FSYNC_OUT_PIN |
+				  MAX96724_FSYNC_0_FSYNC_MODE |
+				  MAX96724_FSYNC_0_FSYNC_METH,
+				  val |
+				  FIELD_PREP(MAX96724_FSYNC_0_FSYNC_MODE, mode) |
+				  FIELD_PREP(MAX96724_FSYNC_0_FSYNC_METH,
+					     MAX96724_FSYNC_0_FSYNC_METH_MANUAL));
+}
+
+static int max96724_log_status(struct max_des *des)
+{
+	struct max96724_priv *priv = des_to_priv(des);
+	unsigned int status, err_cnt, ctrl;
+	int ret;
+
+	if (!des->fsync.enabled)
+		return 0;
+
+	ret = regmap_read(priv->regmap, MAX96724_FSYNC_22, &status);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(priv->regmap, MAX96724_FSYNC_16, &err_cnt);
+	if (ret)
+		return ret;
+
+	/* Read back the control register, the generator is silent without it. */
+	ret = regmap_read(priv->regmap, MAX96724_FSYNC_0, &ctrl);
+	if (ret)
+		return ret;
+
+	dev_info(priv->dev,
+		 "fsync: active: %u, fps: %u, locked: %u, loss_of_lock: %u, err_cnt: %lu, ctrl: 0x%02x\n",
+		 des->fsync_active, des->fsync.fps,
+		 !!(status & MAX96724_FSYNC_22_FSYNC_LOCKED),
+		 !!(status & MAX96724_FSYNC_22_LOSS_OF_LOCK),
+		 FIELD_GET(MAX96724_FSYNC_16_FSYNC_ERR_CNT, err_cnt), ctrl);
+
+	if (des->fsync.gen_pin != MAX_DES_FSYNC_NO_GEN_PIN) {
+		unsigned int pin = des->fsync.gen_pin;
+
+		ret = regmap_read(priv->regmap, MAX96724_GPIO_A(pin), &ctrl);
+		if (ret)
+			return ret;
+
+		dev_info(priv->dev, "fsync: gen pin: MFP%u, level: %u\n", pin,
+			 !!(ctrl & MAX96724_GPIO_A_GPIO_IN));
+	}
+
+	return 0;
+}
+
 static const struct max_serdes_tpg_entry max96724_tpg_entries[] = {
 	MAX_TPG_ENTRY_640X480P60_RGB888,
 	MAX_TPG_ENTRY_1920X1080P30_RGB888,
@@ -1111,6 +1439,7 @@ static const struct max_des_ops max96724_ops = {
 #endif
 	.log_pipe_status = max96724_log_pipe_status,
 	.log_phy_status = max96724_log_phy_status,
+	.log_status = max96724_log_status,
 	.set_enable = max96724_set_enable,
 	.init = max96724_init,
 	.init_phy = max96724_init_phy,
@@ -1125,6 +1454,7 @@ static const struct max_des_ops max96724_ops = {
 	.set_tpg = max96724_set_tpg,
 	.select_links = max96724_select_links,
 	.set_link_version = max96724_set_link_version,
+	.set_fsync = max96724_set_fsync,
 };
 
 static const struct max96724_chip_info max96724_info = {
